@@ -2,12 +2,29 @@ import os
 import asyncio
 from aiohttp import web
 from pyrogram import Client, idle
+from pyrogram.errors import FloodWait
 from config import API_HASH, API_ID, BOT_TOKEN, Server
 from server.web_server import build_web_app
 from server.byte_streamer import multi_clients, work_loads
 from logger import logging
 
 logger = logging.getLogger(__name__)
+
+
+async def start_client_safe(client: Client, name: str = "Client"):
+    while True:
+        try:
+            await client.start()
+            bot_info = await client.get_me()
+            logger.info(f"✅ {name} Live: @{bot_info.username}")
+            return bot_info
+        except FloodWait as e:
+            logger.warning(f"⚠️ {name} got Telegram FloodWait of {e.value}s (~{max(1, e.value // 60)} min). Waiting before retrying...")
+            await asyncio.sleep(e.value + 3)
+        except Exception as e:
+            logger.error(f"❌ Failed starting {name}: {e}")
+            raise e
+
 
 async def start_services():
     logger.info("Initializing Main Pyrogram Client...")
@@ -21,9 +38,7 @@ async def start_services():
         sleep_threshold=15,
     )
 
-    await main_client.start()
-    bot_info = await main_client.get_me()
-    logger.info(f"Main Bot Live: @{bot_info.username}")
+    await start_client_safe(main_client, "Main Bot")
 
     multi_clients[0] = main_client
     work_loads[0] = 0
@@ -43,12 +58,11 @@ async def start_services():
                 no_updates=True,
                 in_memory=True,
             )
-            await extra_client.start()
+            await start_client_safe(extra_client, f"Multi-Client #{index}")
             multi_clients[index] = extra_client
             work_loads[index] = 0
-            logger.info(f"Multi-Client #{index} Active!")
         except Exception as e:
-            logger.error(f"Failed starting Multi-Client #{index}: {e}")
+            logger.error(f"Skipping Multi-Client #{index}: {e}")
         index += 1
 
     logger.info(f"Starting aiohttp Web Server on {Server.BIND_ADDRESS}:{Server.PORT}...")
@@ -59,6 +73,7 @@ async def start_services():
     logger.info(f"🚀 TituStoreBot Fully Live at: {Server.URL}")
     await idle()
     await app_runner.cleanup()
+
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
