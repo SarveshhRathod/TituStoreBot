@@ -59,21 +59,6 @@ async def start(c, m, cb=False):
         except Exception:
             decoded_param = param
 
-        # Password / PIN Check
-        if "_pin" in decoded_param:
-            raw_param, pin_code = decoded_param.split("_pin")
-            try:
-                ask_pin = await c.ask(
-                    chat_id=m.from_user.id,
-                    text=await tr(m.from_user.id, "pin_prompt"),
-                    timeout=60
-                )
-                if ask_pin.text.strip() != pin_code:
-                    return await ask_pin.reply_text(await tr(m.from_user.id, "pin_wrong"))
-            except Exception:
-                return await send_msg.edit("⌛ PIN Verification Timeout.")
-            decoded_param = raw_param
-
         if 'batch_' in decoded_param:
             await send_msg.delete()
             try:
@@ -139,6 +124,36 @@ async def start(c, m, cb=False):
             text=text,
             reply_markup=InlineKeyboardMarkup(buttons)
         )
+
+
+@Client.on_message(filters.command('setcaption') & filters.private & filters.incoming)
+async def set_caption_cmd(c, m):
+    if m.from_user.id != OWNER_ID and m.from_user.id not in AUTH_USERS:
+        return
+
+    if len(m.command) < 2:
+        return await m.reply_text(
+            "Usage: `/setcaption Your Template Here`\n\n"
+            "Placeholders:\n`{file_name}`, `{file_size}`, `{uploader}`, `{downloads}`",
+            quote=True
+        )
+
+    caption_text = m.text.split(None, 1)[1]
+    await update_settings(custom_caption=caption_text)
+    await m.reply_text("✅ **Custom Caption Template Saved!**", quote=True)
+
+
+@Client.on_message(filters.command('setwatermark') & filters.private & filters.incoming)
+async def set_watermark_cmd(c, m):
+    if m.from_user.id != OWNER_ID and m.from_user.id not in AUTH_USERS:
+        return
+
+    if len(m.command) < 2:
+        return await m.reply_text("Usage: `/setwatermark @YourChannel`", quote=True)
+
+    wm_text = m.text.split(None, 1)[1]
+    await update_settings(watermark=wm_text)
+    await m.reply_text(f"✅ **Watermark set to:** `{wm_text}`", quote=True)
 
 
 @Client.on_message(filters.command('lang') & filters.private & filters.incoming)
@@ -253,10 +268,10 @@ async def set_mode(c, m):
     caption_mode = (await get_data(usr)).up_name
     if caption_mode:
         await update_as_name(usr, False)
-        text = "Uᴘʟᴏᴀᴅᴇʀ Dᴇᴛᴀɪʟs ɪɴ Cᴀᴘᴛɪᴏɴ: **Dɪsᴀ┴ʟᴇᴅ ❌**"
+        text = "Uᴘʟᴏᴀᴅᴇʀ Dᴇᴛᴀɪʟs ɪɴ Cᴀᴘᴛɪᴏɴ: **DISABLED ❌**"
     else:
         await update_as_name(usr, True)
-        text = "Uᴘʟᴏᴀᴅᴇʀ Dᴇᴛᴀɪʟs ɪɴ Cᴀᴘᴛɪᴏɴ: **Eɴᴀʙʟᴇᴅ ✔️**"
+        text = "Uᴘʟᴏᴀᴅᴇʀ Dᴇᴛᴀɪʟs ɪɴ Cᴀᴘᴛɪᴏɴ: **ENABLED ✔️**"
     await m.reply_text(text, quote=True)
 
 
