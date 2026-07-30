@@ -2,7 +2,7 @@ import os
 import asyncio
 from aiohttp import web
 from pyrogram import Client, idle
-from config import API_HASH, API_ID, BOT_TOKEN, Telegram, Server
+from config import API_HASH, API_ID, BOT_TOKEN, Server
 from server.web_server import build_web_app
 from server.byte_streamer import multi_clients, work_loads
 from logger import logging
@@ -28,7 +28,6 @@ async def start_services():
     multi_clients[0] = main_client
     work_loads[0] = 0
 
-    # Multi-Client Load Balancing Initializer
     index = 1
     while True:
         token = os.environ.get(f"MULTI_TOKEN{index}")
@@ -52,7 +51,6 @@ async def start_services():
             logger.error(f"Failed starting Multi-Client #{index}: {e}")
         index += 1
 
-    # Start Native aiohttp Async Web Server in same event loop
     logger.info(f"Starting aiohttp Web Server on {Server.BIND_ADDRESS}:{Server.PORT}...")
     app_runner = web.AppRunner(build_web_app())
     await app_runner.setup()
