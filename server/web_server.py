@@ -5,7 +5,7 @@ import jinja2
 from aiohttp import web
 from pyrogram.file_id import FileId
 from config import Server, DB_CHANNEL_ID
-from server.byte_streamer import ByteStreamer, multi_clients, work_loads
+from server.byte_streamer import ByteStreamer, multi_clients, work_loads, CHUNK_SIZE
 from logger import logging
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ PLAY_TEMPLATE_STR = """<!DOCTYPE html>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/proavipatil/data@main/fs/src/plyr.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0d0f12; color: #e5e7eb; font-family: sans-serif; }
+        body { background-color: #0b0f17; color: #e5e7eb; font-family: sans-serif; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-center p-4">
@@ -88,7 +88,7 @@ def humanbytes(size):
 async def root_route_handler(_):
     return web.json_response({
         "status": "running",
-        "engine": "TituStoreBot Native ByteStreamer",
+        "engine": "TituStoreBot StreamResponse RAM-Cached ByteStreamer",
         "url": Server.URL
     })
 
@@ -162,7 +162,7 @@ async def media_streamer_handler(request: web.Request):
                 headers={"Content-Range": f"bytes */{file_size}"},
             )
 
-        chunk_size = 1024 * 1024
+        chunk_size = CHUNK_SIZE
         until_bytes = min(until_bytes, file_size - 1)
 
         offset = from_bytes - (from_bytes % chunk_size)
@@ -176,22 +176,31 @@ async def media_streamer_handler(request: web.Request):
             class_cache[client] = ByteStreamer(client)
         tg_connect = class_cache[client]
 
-        body = tg_connect.yield_file(
+        body_generator = tg_connect.yield_file(
             file_id, index, offset, first_part_cut, last_part_cut, part_count, chunk_size
         )
 
-        return web.Response(
+        response = web.StreamResponse(
             status=206 if range_header else 200,
-            body=body,
             headers={
                 "Content-Type": mime_type,
                 "Content-Range": f"bytes {from_bytes}-{until_bytes}/{file_size}",
                 "Content-Length": str(req_length),
                 "Content-Disposition": f'inline; filename="{file_name}"',
                 "Accept-Ranges": "bytes",
-                "Access-Control-Allow-Origin": "*"
-            },
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "public, max-age=31536000",
+                "ETag": f'"{path}-{from_bytes}-{until_bytes}"'
+            }
         )
+        await response.prepare(request)
+
+        async for chunk in body_generator:
+            await response.write(chunk)
+            await response.drain()
+
+        return response
+
     except Exception as e:
         logger.error(f"Streaming error: {e}")
         return web.HTTPInternalServerError(text=str(e))
