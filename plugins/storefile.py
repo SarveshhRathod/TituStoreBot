@@ -10,7 +10,7 @@ from config import AUTH_USERS, DB_CHANNEL_ID, IS_PRIVATE
 #### FOR PRIVATE ####
 
 
-@Client.on_message((filters.document | filters.video | filters.audio | filters.photo) & filters.incoming & ~filters.edited & ~filters.channel)
+@Client.on_message((filters.document | filters.video | filters.audio | filters.photo) & filters.incoming  & ~filters.channel)
 async def storefile(c, m):
     if IS_PRIVATE and m.from_user.id not in AUTH_USERS:
         return
@@ -57,7 +57,7 @@ async def storefile(c, m):
 ###### FOR CHANNEL ######
 
 
-@Client.on_message((filters.document | filters.video | filters.audio | filters.photo) & filters.incoming & filters.channel & ~filters.forwarded & ~filters.edited)
+@Client.on_message((filters.document | filters.video | filters.audio | filters.photo) & filters.incoming & filters.channel & ~filters.forwarded )
 async def storefile_channel(c, m):
     if IS_PRIVATE and m.chat.id not in AUTH_USERS:
         return
