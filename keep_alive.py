@@ -1,6 +1,7 @@
 import os
 import re
 import asyncio
+import base64
 from flask import Flask, Response, request, render_template_string
 from threading import Thread
 from config import DB_CHANNEL_ID
@@ -140,8 +141,7 @@ PLAYER_TEMPLATE = """
 """
 
 
-async def _decode_string(base64_string: str) -> str:
-    import base64
+def _decode_string(base64_string: str) -> str:
     base64_string = base64_string.strip()
     padding = '=' * (4 - len(base64_string) % 4) if len(base64_string) % 4 != 0 else ''
     base64_bytes = (base64_string + padding).replace('-', '+').replace('_', '/').encode("ascii")
@@ -177,13 +177,12 @@ def stream_page(file_id):
         return "Bot client initializing... refresh in a few seconds.", 503
 
     try:
-        loop = pyro_client.loop
-        decoded = asyncio.run_coroutine_threadsafe(_decode_string(file_id), loop).result(timeout=10)
+        decoded = _decode_string(file_id)
         chat_id, msg_id = decoded.split("_")
-        
-        msg = asyncio.run_coroutine_threadsafe(
-            pyro_client.get_messages(DB_CHANNEL_ID, int(msg_id)), loop
-        ).result(timeout=10)
+
+        loop = pyro_client.loop
+        coro = pyro_client.get_messages(DB_CHANNEL_ID, int(msg_id))
+        msg = asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=10)
 
         if not msg or msg.empty:
             return "File not found or deleted.", 404
@@ -192,7 +191,7 @@ def stream_page(file_id):
         title = getattr(media, "file_name", "Video_File")
         size = humanbytes(getattr(media, "file_size", 0))
         mime = getattr(media, "mime_type", "video/mp4") or "video/mp4"
-        
+
         host_url = request.host_url.rstrip('/')
         stream_raw_url = f"{host_url}/watch/{file_id}"
 
@@ -215,13 +214,12 @@ def watch_stream(file_id):
         return "Bot client offline.", 503
 
     try:
-        loop = pyro_client.loop
-        decoded = asyncio.run_coroutine_threadsafe(_decode_string(file_id), loop).result(timeout=10)
+        decoded = _decode_string(file_id)
         chat_id, msg_id = decoded.split("_")
 
-        msg = asyncio.run_coroutine_threadsafe(
-            pyro_client.get_messages(DB_CHANNEL_ID, int(msg_id)), loop
-        ).result(timeout=10)
+        loop = pyro_client.loop
+        coro = pyro_client.get_messages(DB_CHANNEL_ID, int(msg_id))
+        msg = asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=10)
 
         if not msg or msg.empty:
             return "File not found.", 404
