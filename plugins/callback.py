@@ -2,6 +2,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .commands import BATCH, start
+from database.database import set_user_lang
 from config import DB_CHANNEL_ID
 
 
@@ -15,11 +16,13 @@ async def help_cb(c, m):
 
 **Yᴏᴜ ᴄᴀɴ ᴜsᴇ ᴍᴇ ɪɴ ᴄʜᴀɴɴᴇʟ ᴛᴏᴏ 😉**
 
-★ Mᴀᴋᴇ ᴍᴇ ᴀᴅᴍɪɴ ɪɴ ʏᴏᴜʀ ᴄʜᴀɴɴᴇʟ ᴡɪᴛʜ ᴇᴅɪᴛ ᴘᴇʀᴍɪssɪᴏɴ. Tʜᴀᴛ's ᴇɴᴏᴜɢʜ, ɴᴏᴡ ᴄᴏɴᴛɪɴᴜᴇ ᴜᴘʟᴏᴀᴅɪɴɢ ғɪʟᴇs ɪɴ ᴄʜᴀɴɴᴇʟ and I ᴡɪʟʟ ᴇᴅɪᴛ ᴀʟʟ ᴘᴏsᴛs ᴀɴᴅ ᴀᴅᴅ sʜᴀʀᴇᴀʙʟᴇ ʟɪɴᴋ URL ʙᴜᴛᴛᴏɴs.
+★ Mᴀᴋᴇ ᴍᴇ ᴀᴅᴍɪɴ ɪɴ ʏᴏᴜʀ ᴄʜᴀɴɴᴇʟ. I ᴡɪʟʟ ᴇᴅɪᴛ ᴀʟʟ ᴘᴏsᴛs ᴀɴᴅ ᴀᴅᴅ sʜᴀʀᴇᴀʙʟᴇ ʟɪɴᴋ buttons automatically.
 
-**Hᴏᴡ ᴛᴏ ᴇɴᴀʙʟᴇ ᴜᴘʟᴏᴀᴅᴇʀ ᴅᴇᴛᴀɪʟs ɪɴ ᴄᴀᴘᴛɪᴏɴ**
-
-★ Usᴇ /mode ᴄᴏᴍᴍᴀɴᴅ ᴛᴏ ᴄʜᴀɴɢᴇ ᴀɴᴅ ᴀʟsᴏ ʏᴏᴜ ᴄᴀɴ ᴜsᴇ `/mode channel_id` ᴛᴏ ᴄᴏɴᴛʀᴏʟ ᴄᴀᴘᴛɪᴏɴ ғᴏʀ ᴄʜᴀɴɴᴇʟ ᴍsɢ."""
+**Cᴏᴍᴍᴀɴᴅs Lɪsᴛ:**
+- `/lang` - Change Bot Language
+- `/mode` - Toggle uploader details caption
+- `/batch` - Create multi-file batch link
+- `/admin` - Open Admin Control Panel"""
 
     buttons = [[
         InlineKeyboardButton('Hᴏᴍᴇ 🏕', callback_data='home'),
@@ -51,7 +54,7 @@ async def about_cb(c, m):
 
 ╭───[ **🔅 TɪᴛᴜꜱᴛᴏʀᴇBᴏᴛ 🔅** ]───⍟
 │
-├**🔸Vᴇʀꜱɪᴏɴ :** `4.5.0`
+├**🔸Vᴇʀꜱɪᴏɴ :** `5.0.0`
 │
 ├**🔹Sᴏᴜʀᴄᴇ :** [Cʟɪᴄᴋ Hᴇʀᴇ 🥰](https://github.com/SarveshhRathod/TituStoreBot)
 │
@@ -79,6 +82,14 @@ async def about_cb(c, m):
 async def home_cb(c, m):
     await m.answer()
     await start(c, m, cb=True)
+
+
+@Client.on_callback_query(filters.regex('^setlang_'))
+async def setlang_cb(c, m):
+    lang_code = m.data.split("_")[1]
+    await set_user_lang(m.from_user.id, lang_code)
+    await m.answer("✅ Language Updated Successfully!", show_alert=True)
+    await m.message.delete()
 
 
 @Client.on_callback_query(filters.regex('^done$'))
