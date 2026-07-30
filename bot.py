@@ -1,3 +1,4 @@
+from collections import defaultdict
 from pyrogram import Client
 from config import API_HASH, API_ID, BOT_TOKEN
 from keep_alive import keep_alive, set_pyro_client
@@ -16,6 +17,16 @@ def main():
         workers=100,
         sleep_threshold=15,
     )
+
+    # Universal Safe Initialization for listeners dictionary
+    if not hasattr(app, "listeners") or app.listeners is None:
+        app.listeners = defaultdict(dict)
+    elif isinstance(app.listeners, dict) and not isinstance(app.listeners, defaultdict):
+        new_listeners = defaultdict(dict)
+        for k, v in app.listeners.items():
+            if isinstance(v, dict):
+                new_listeners[k] = v
+        app.listeners = new_listeners
 
     logger.info("TituStoreBot is starting...")
     set_pyro_client(app)
