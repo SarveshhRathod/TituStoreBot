@@ -6,14 +6,13 @@ from logger import logging
 
 logger = logging.getLogger(__name__)
 
-# Anti-Spam Rate Limiter (Sliding Window In-Memory)
+# Anti-Spam Rate Limiter
 _user_requests = {}
 
 
 def is_rate_limited(user_id: int) -> bool:
     now = time.time()
     timestamps = _user_requests.get(user_id, [])
-    # Filter requests older than 60s
     timestamps = [t for t in timestamps if now - t < 60]
     if len(timestamps) >= RATE_LIMIT_PER_MIN:
         _user_requests[user_id] = timestamps
@@ -23,27 +22,41 @@ def is_rate_limited(user_id: int) -> bool:
     return False
 
 
+def is_playable(media) -> bool:
+    if not media:
+        return False
+
+    mime = (getattr(media, "mime_type", "") or "").lower()
+    file_name = (getattr(media, "file_name", "") or "").lower()
+
+    if mime.startswith("video/") or mime.startswith("audio/"):
+        return True
+
+    playable_exts = (
+        ".mp4", ".mkv", ".webm", ".avi", ".mov", ".flv", ".wmv", ".m4v", ".3gp",
+        ".mp3", ".m4a", ".aac", ".ogg", ".wav", ".flac", ".opus"
+    )
+    if any(file_name.endswith(ext) for ext in playable_exts):
+        return True
+
+    return False
+
+
 # Multi-Language Strings
 STRINGS = {
     "en": {
         "start": "Hᴇʏ! {mention}\n\n🤗 **I'm TituStoreBot**\n\n‣ Yᴏᴜ ᴄᴀɴ sᴛᴏʀᴇ ʏᴏᴜʀ Tᴇʟᴇɢʀᴀᴍ Mᴇᴅɪᴀ ғᴏʀ ᴘᴇʀᴍᴀɴᴇɴᴛ Lɪɴᴋ!",
         "rate_limit": "⚠️ **Rᴀᴛᴇ Lɪᴍɪᴛ Exᴄᴇᴇᴅᴇᴅ!** Pʟᴇᴀsᴇ ᴡᴀɪᴛ A Fᴇᴡ Sᴇᴄᴏɴᴅs Bᴇғᴏʀᴇ Nᴇxᴛ Rᴇǫᴜᴇsᴛ.",
-        "pin_prompt": "🔐 **Tʜɪs ғɪʟᴇ ɪs Pɪɴ/Pᴀssᴡᴏʀᴅ Pʀᴏᴛᴇᴄᴛᴇᴅ.**\n\nEntᴇʀ Tʜᴇ 4-Dɪɢɪᴛ PIN Tᴏ Aᴄᴄᴇss:",
-        "pin_wrong": "❌ **Iɴᴄᴏʀʀᴇᴄᴛ PIN!** Aᴄᴄᴇss Dᴇɴɪᴇᴅ.",
         "auto_del_msg": "⏳ Yʜ Fɪʟᴇ **{time}** ᴍᴇ ᴀᴜᴛᴏ-ᴅᴇʟᴇᴛᴇ ʜᴏ ᴊᴀʏᴇɢɪ.",
     },
     "hi": {
         "start": "नमस्ते {mention}!\n\n🤗 **मैं TituStoreBot हूँ**\n\n‣ आप यहाँ अपनी फाइलें हमेशा के लिए शेयर कर सकते हैं!",
         "rate_limit": "⚠️ **स्पीड लिमिट!** कृपया अगली फ़ाइल माँगने से पहले कुछ सेकंड प्रतीक्षा करें।",
-        "pin_prompt": "🔐 **यह फ़ाइल पासवर्ड द्वारा सुरक्षित है।**\n\nएक्सेस करने के लिए 4 अंकों का PIN दर्ज करें:",
-        "pin_wrong": "❌ **गलत PIN!** पहुँच अस्वीकृत।",
         "auto_del_msg": "⏳ यह फ़ाइल **{time}** में ऑटो-डिलीट हो जाएगी।",
     },
     "hn": {
         "start": "Hey {mention}!\n\n🤗 **Main TituStoreBot hoon**\n\n‣ Yahan apni files store karo permanently!",
         "rate_limit": "⚠️ **Thoda ruk ke request karo bhai!** Spam mat karo.",
-        "pin_prompt": "🔐 **Yeh file Password Protected hai.**\n\n4-digit PIN enter karo unlock karne ke liye:",
-        "pin_wrong": "❌ **Galat PIN!** Access nahi milega.",
         "auto_del_msg": "⏳ Yeh File **{time}** me auto-delete ho jayegi.",
     }
 }
@@ -104,7 +117,7 @@ async def format_caption(media_name: str, media_size: str, uploader: str, downlo
     else:
         caption = f"📂 **Fɪʟᴇ Nᴀᴍᴇ:** `{media_name}`\n📦 **Fɪʟᴇ Sɪᴢᴇ:** `{media_size}`\n👁 **Dᴏᴡɴʟᴏᴀᴅs:** `{downloads}`\n🍁 **Uᴘʟᴏᴀᴅᴇʀ:** {uploader}"
         if raw_caption:
-            caption += f"\n\n✏️ **Cᴀᴘᴛɪᴏɴ:** {raw_caption}"
+            caption += f"\n\n✏️ **CᴀᴘᴛɪᴏN:** {raw_caption}"
 
     if watermark:
         caption += f"\n\n🔰 **Pᴏᴡᴇʀᴇᴅ Bʏ:** {watermark}"
