@@ -12,44 +12,38 @@ logger = logging.getLogger(__name__)
 routes = web.RouteTableDef()
 class_cache = {}
 
-SEGMENT_SIZE_BYTES = 2 * 1024 * 1024  # 2MB chunks for HLS segments (~2-3 sec of 1080p video)
-
 PLAY_TEMPLATE_STR = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vidstream HLS | {{file_name}}</title>
-    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css">
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <title>TituStoreBot Stream | {{file_name}}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/proavipatil/data@main/fs/src/plyr.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0b0f17; color: #e5e7eb; font-family: sans-serif; }
+        body { background-color: #0d0f12; color: #e5e7eb; font-family: sans-serif; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-center p-4">
     <div class="max-w-4xl w-full bg-gray-900 rounded-xl overflow-hidden shadow-2xl border border-gray-800 p-4">
-        <div class="flex items-center justify-between mb-2">
-            <h2 class="text-xl font-bold text-green-400 truncate">🎬 {{file_name}}</h2>
-            <span class="bg-green-900 text-green-300 text-xs px-2.5 py-1 rounded-full font-semibold">HLS Adaptive</span>
-        </div>
+        <h2 class="text-xl font-bold text-green-400 mb-2 truncate">🎬 {{file_name}}</h2>
         <p class="text-sm text-gray-400 mb-4">📦 Size: {{file_size}}</p>
 
         <div class="rounded-lg overflow-hidden bg-black mb-6">
-            <video id="player" class="player" playsinline controls width="100%"></video>
+            <video id="player" class="player" src="{{file_url}}" playsinline controls width="100%"></video>
         </div>
 
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <a href="{{file_dl_url}}" download="{{file_name}}" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg text-center text-sm transition">
+            <a href="{{file_url}}" download="{{file_name}}" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg text-center text-sm transition">
                 📥 Download Video
             </a>
-            <button onclick="navigator.clipboard.writeText('{{file_hls_url}}'); alert('HLS Playlist Link Copied!')" class="bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2.5 px-4 rounded-lg text-center text-sm transition">
-                🔗 Copy HLS Link
+            <button onclick="navigator.clipboard.writeText('{{file_url}}'); alert('Direct Stream Link Copied!')" class="bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2.5 px-4 rounded-lg text-center text-sm transition">
+                🔗 Copy Link
             </button>
-            <a href="vlc://{{file_dl_url}}" class="bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2.5 px-4 rounded-lg text-center text-sm transition">
+            <a href="vlc://{{file_url}}" class="bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2.5 px-4 rounded-lg text-center text-sm transition">
                 🍊 VLC Player
             </a>
-            <a href="intent:{{file_dl_url}}#Intent;package=com.mxtech.videoplayer.ad;type=video/*;end" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-4 rounded-lg text-center text-sm transition">
+            <a href="intent:{{file_url}}#Intent;package=com.mxtech.videoplayer.ad;type=video/*;end" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-4 rounded-lg text-center text-sm transition">
                 📺 MX Player
             </a>
         </div>
@@ -58,31 +52,11 @@ PLAY_TEMPLATE_STR = """<!DOCTYPE html>
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const video = document.getElementById('player');
-            const hlsUrl = '{{file_hls_url}}';
-
-            if (Hls.isSupported()) {
-                const hls = new Hls({
-                    maxBufferLength: 30,
-                    maxMaxBufferLength: 60,
-                    enableWorker: true
-                });
-                hls.loadSource(hlsUrl);
-                hls.attachMedia(video);
-                hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    new Plyr(video, {
-                        controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'settings', 'pip', 'fullscreen'],
-                        settings: ['speed'],
-                        speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] }
-                    });
-                });
-            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = hlsUrl;
-                new Plyr(video);
-            } else {
-                video.src = '{{file_dl_url}}';
-                new Plyr(video);
-            }
+            const player = new Plyr('#player', {
+                controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'settings', 'pip', 'fullscreen'],
+                settings: ['speed'],
+                speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] }
+            });
         });
     </script>
 </body>
@@ -114,12 +88,13 @@ def humanbytes(size):
 async def root_route_handler(_):
     return web.json_response({
         "status": "running",
-        "engine": "TituStoreBot Enterprise HLS Adaptive Streamer",
+        "engine": "TituStoreBot Native ByteStreamer",
         "url": Server.URL
     })
 
 
 @routes.get("/stream/{path}", allow_head=True)
+@routes.get("/watch/{path}", allow_head=True)
 async def stream_page_handler(request: web.Request):
     try:
         path = request.match_info["path"]
@@ -135,119 +110,17 @@ async def stream_page_handler(request: web.Request):
         file_name = getattr(media, "file_name", "Video_File")
         file_size = humanbytes(getattr(media, "file_size", 0))
 
-        hls_url = urllib.parse.urljoin(Server.URL, f'hls/{path}/index.m3u8')
-        dl_url = urllib.parse.urljoin(Server.URL, f'dl/{path}')
+        src = urllib.parse.urljoin(Server.URL, f'dl/{path}')
 
         template = jinja2.Template(PLAY_TEMPLATE_STR)
         html_out = template.render(
             file_name=file_name,
-            file_hls_url=hls_url,
-            file_dl_url=dl_url,
+            file_url=src,
             file_size=file_size
         )
         return web.Response(text=html_out, content_type='text/html')
     except Exception as e:
         logger.error(f"Stream Page Error: {e}")
-        return web.HTTPInternalServerError(text=str(e))
-
-
-@routes.get("/hls/{path}/index.m3u8", allow_head=True)
-async def hls_playlist_handler(request: web.Request):
-    """Dynamic HLS M3U8 Master Playlist Generator"""
-    try:
-        path = request.match_info["path"]
-        decoded = decode_id(path)
-        chat_id, msg_id = decoded.split("_")
-
-        primary_client = multi_clients.get(0)
-        msg = await primary_client.get_messages(DB_CHANNEL_ID, int(msg_id))
-        if not msg or msg.empty:
-            return web.HTTPNotFound(text="File not found")
-
-        media = msg.document or msg.video or msg.audio
-        file_size = getattr(media, "file_size", 0)
-
-        num_segments = math.ceil(file_size / SEGMENT_SIZE_BYTES) if file_size > 0 else 1
-
-        m3u8_lines = [
-            "#EXTM3U",
-            "#EXT-X-VERSION:3",
-            "#EXT-X-TARGETDURATION:4",
-            "#EXT-X-MEDIA-SEQUENCE:0"
-        ]
-
-        for i in range(num_segments):
-            m3u8_lines.append("#EXTINF:3.0,")
-            m3u8_lines.append(f"segment_{i}.ts")
-
-        m3u8_lines.append("#EXT-X-ENDLIST")
-        playlist_body = "\n".join(m3u8_lines)
-
-        return web.Response(
-            text=playlist_body,
-            content_type="application/vnd.apple.mpegurl",
-            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"}
-        )
-    except Exception as e:
-        logger.error(f"HLS Playlist Error: {e}")
-        return web.HTTPInternalServerError(text=str(e))
-
-
-@routes.get("/hls/{path}/segment_{num}.ts", allow_head=True)
-async def hls_segment_handler(request: web.Request):
-    """Serves exact 2MB HLS segment chunk from Telegram MTProto"""
-    try:
-        path = request.match_info["path"]
-        segment_num = int(request.match_info["num"])
-        decoded = decode_id(path)
-        chat_id, msg_id = decoded.split("_")
-
-        index = min(work_loads, key=work_loads.get) if work_loads else 0
-        client = multi_clients.get(index, multi_clients.get(0))
-
-        msg = await client.get_messages(DB_CHANNEL_ID, int(msg_id))
-        if not msg or msg.empty:
-            return web.HTTPNotFound(text="File not found")
-
-        media = msg.document or msg.video or msg.audio
-        file_size = getattr(media, "file_size", 0)
-        file_id_str = getattr(media, "file_id", "")
-        file_id = FileId.decode(file_id_str)
-
-        from_bytes = segment_num * SEGMENT_SIZE_BYTES
-        until_bytes = min(from_bytes + SEGMENT_SIZE_BYTES - 1, file_size - 1)
-
-        if from_bytes >= file_size:
-            return web.HTTPNotFound(text="Segment range out of bounds")
-
-        chunk_size = 1024 * 1024
-        offset = from_bytes - (from_bytes % chunk_size)
-        first_part_cut = from_bytes - offset
-        last_part_cut = until_bytes % chunk_size + 1
-
-        req_length = until_bytes - from_bytes + 1
-        part_count = math.ceil(until_bytes / chunk_size) - math.floor(offset / chunk_size)
-
-        if client not in class_cache:
-            class_cache[client] = ByteStreamer(client)
-        tg_connect = class_cache[client]
-
-        body = tg_connect.yield_file(
-            file_id, index, offset, first_part_cut, last_part_cut, part_count, chunk_size
-        )
-
-        return web.Response(
-            status=200,
-            body=body,
-            headers={
-                "Content-Type": "video/mp2t",
-                "Content-Length": str(req_length),
-                "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "public, max-age=31536000"
-            }
-        )
-    except Exception as e:
-        logger.error(f"HLS Segment Error: {e}")
         return web.HTTPInternalServerError(text=str(e))
 
 
