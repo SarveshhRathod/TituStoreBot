@@ -161,6 +161,13 @@ def humanbytes(size):
     return str(round(size, 2)) + " " + dic_power_n[n] + 'B'
 
 
+def _get_msg_safe(msg_id: int):
+    res = pyro_client.get_messages(DB_CHANNEL_ID, msg_id)
+    if asyncio.iscoroutine(res):
+        return asyncio.run_coroutine_threadsafe(res, pyro_client.loop).result(timeout=10)
+    return res
+
+
 @app.get("/")
 def home():
     return "TituStoreBot Vidstream Engine is Online!", 200
@@ -180,9 +187,7 @@ def stream_page(file_id):
         decoded = _decode_string(file_id)
         chat_id, msg_id = decoded.split("_")
 
-        loop = pyro_client.loop
-        coro = pyro_client.get_messages(DB_CHANNEL_ID, int(msg_id))
-        msg = asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=10)
+        msg = _get_msg_safe(int(msg_id))
 
         if not msg or msg.empty:
             return "File not found or deleted.", 404
@@ -217,9 +222,7 @@ def watch_stream(file_id):
         decoded = _decode_string(file_id)
         chat_id, msg_id = decoded.split("_")
 
-        loop = pyro_client.loop
-        coro = pyro_client.get_messages(DB_CHANNEL_ID, int(msg_id))
-        msg = asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=10)
+        msg = _get_msg_safe(int(msg_id))
 
         if not msg or msg.empty:
             return "File not found.", 404
@@ -246,21 +249,30 @@ def watch_stream(file_id):
         content_length = end - start + 1
 
         def stream_generator():
-            async def _stream():
+            loop = pyro_client.loop
+            async def _async_stream():
                 async for chunk in pyro_client.stream_media(msg, offset=start):
                     yield chunk
 
-            async_gen = _stream()
-            while True:
-                try:
-                    future = asyncio.run_coroutine_threadsafe(async_gen.__anext__(), loop)
-                    chunk = future.result(timeout=15)
+            gen = pyro_client.stream_media(msg, offset=start)
+            if asyncio.iscoroutine(gen):
+                gen = asyncio.run_coroutine_threadsafe(gen, loop).result(timeout=10)
+
+            if hasattr(gen, '__aiter__'):
+                async_gen = gen.__aiter__()
+                while True:
+                    try:
+                        future = asyncio.run_coroutine_threadsafe(async_gen.__anext__(), loop)
+                        chunk = future.result(timeout=15)
+                        yield chunk
+                    except StopAsyncIteration:
+                        break
+                    except Exception as err:
+                        logger.error(f"Stream error: {err}")
+                        break
+            elif hasattr(gen, '__iter__'):
+                for chunk in gen:
                     yield chunk
-                except StopAsyncIteration:
-                    break
-                except Exception as e:
-                    logger.error(f"Stream chunk error: {e}")
-                    break
 
         response = Response(
             stream_generator(),
