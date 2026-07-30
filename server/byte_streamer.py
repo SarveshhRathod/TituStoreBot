@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections import OrderedDict
 from typing import Dict, Union
 from pyrogram import Client, utils, raw
 from pyrogram.session import Session, Auth
@@ -11,10 +12,30 @@ logger = logging.getLogger(__name__)
 work_loads = {}
 multi_clients = {}
 
+# 2MB Chunk Size for higher throughput & fewer MTProto RPC calls
+CHUNK_SIZE = 2 * 1024 * 1024
+
+# RAM Byte Cache: LRU Cache storing max 50 chunks in memory (~100MB RAM buffer)
+MAX_CACHE_ENTRIES = 50
+_RAM_CHUNK_CACHE = OrderedDict()
+
+
+def get_cached_chunk(cache_key: str):
+    if cache_key in _RAM_CHUNK_CACHE:
+        _RAM_CHUNK_CACHE.move_to_end(cache_key)
+        return _RAM_CHUNK_CACHE[cache_key]
+    return None
+
+
+def set_cached_chunk(cache_key: str, data: bytes):
+    if len(_RAM_CHUNK_CACHE) >= MAX_CACHE_ENTRIES:
+        _RAM_CHUNK_CACHE.popitem(last=False)
+    _RAM_CHUNK_CACHE[cache_key] = data
+
 
 class ByteStreamer:
     def __init__(self, client: Client):
-        self.clean_timer = 30 * 60
+        self.clean_timer = 60 * 60  # 1 Hour TTL
         self.client: Client = client
         self.cached_file_ids: Dict[str, FileId] = {}
         asyncio.create_task(self.clean_cache())
@@ -105,6 +126,19 @@ class ByteStreamer:
             )
         return location
 
+    async def _fetch_getfile_raw(self, media_session, location, offset, chunk_size):
+        try:
+            r = await media_session.invoke(
+                raw.functions.upload.GetFile(
+                    location=location, offset=offset, limit=chunk_size
+                ),
+            )
+            if isinstance(r, raw.types.upload.File):
+                return r.bytes
+        except Exception as e:
+            logger.debug(f"MTProto GetFile fetch error: {e}")
+        return b""
+
     async def yield_file(
         self,
         file_id: FileId,
@@ -122,45 +156,56 @@ class ByteStreamer:
         media_session = await self.generate_media_session(client, file_id)
         current_part = 1
         location = await self.get_location(file_id)
+        unique_id = getattr(file_id, "unique_id", str(file_id.media_id))
 
         try:
-            r = await media_session.invoke(
-                raw.functions.upload.GetFile(
-                    location=location, offset=offset, limit=chunk_size
-                ),
-            )
-            if isinstance(r, raw.types.upload.File):
-                while True:
-                    chunk = r.bytes
-                    if not chunk:
-                        break
-                    elif part_count == 1:
-                        yield chunk[first_part_cut:last_part_cut]
-                    elif current_part == 1:
-                        yield chunk[first_part_cut:]
-                    elif current_part == part_count:
-                        yield chunk[:last_part_cut]
-                    else:
-                        yield chunk
+            while True:
+                cache_key = f"{unique_id}_{offset}_{chunk_size}"
+                cached_data = get_cached_chunk(cache_key)
 
-                    current_part += 1
-                    offset += chunk_size
+                if cached_data is not None:
+                    chunk = cached_data
+                else:
+                    chunk = await self._fetch_getfile_raw(media_session, location, offset, chunk_size)
+                    if chunk:
+                        set_cached_chunk(cache_key, chunk)
 
-                    if current_part > part_count:
-                        break
+                if not chunk:
+                    break
 
-                    r = await media_session.invoke(
-                        raw.functions.upload.GetFile(
-                            location=location, offset=offset, limit=chunk_size
-                        ),
-                    )
+                if part_count == 1:
+                    yield chunk[first_part_cut:last_part_cut]
+                elif current_part == 1:
+                    yield chunk[first_part_cut:]
+                elif current_part == part_count:
+                    yield chunk[:last_part_cut]
+                else:
+                    yield chunk
+
+                current_part += 1
+                offset += chunk_size
+
+                if current_part > part_count:
+                    break
+
+                # Prefetch next chunk in background task
+                next_cache_key = f"{unique_id}_{offset}_{chunk_size}"
+                if get_cached_chunk(next_cache_key) is None:
+                    asyncio.create_task(self._prefetch_next(media_session, location, offset, chunk_size, next_cache_key))
+
         except (TimeoutError, AttributeError):
             pass
         finally:
             if index in work_loads:
                 work_loads[index] -= 1
 
+    async def _prefetch_next(self, media_session, location, offset, chunk_size, next_cache_key):
+        chunk = await self._fetch_getfile_raw(media_session, location, offset, chunk_size)
+        if chunk:
+            set_cached_chunk(next_cache_key, chunk)
+
     async def clean_cache(self) -> None:
         while True:
             await asyncio.sleep(self.clean_timer)
             self.cached_file_ids.clear()
+            logger.debug("Cleaned FileProperties Cache")
