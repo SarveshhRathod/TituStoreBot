@@ -110,3 +110,7 @@ class Server:
     URL = "http{}://{}{}/".format(
         "s" if HAS_SSL else "", FQDN, "" if NO_PORT else ":" + str(PORT)
     )
+
+
+# Alias WEB_URL for plugin imports
+WEB_URL = Server.URL
