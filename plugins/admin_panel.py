@@ -8,8 +8,11 @@ from logger import logging
 logger = logging.getLogger(__name__)
 
 
-def is_admin(user_id: int) -> bool:
-    return user_id == OWNER_ID or user_id in AUTH_USERS
+async def is_admin(user_id: int) -> bool:
+    if user_id == OWNER_ID or user_id in AUTH_USERS:
+        return True
+    settings = await get_settings()
+    return user_id in settings.get("moderators", [])
 
 
 async def _panel_view():
@@ -17,12 +20,17 @@ async def _panel_view():
     auto_delete_on = settings.get("auto_delete", False)
     auto_delete_min = settings.get("auto_delete_seconds", 600) // 60
     protect_on = settings.get("protect_content", False)
+    caption_set = "Custom Set ✅" if settings.get("custom_caption") else "Default ❌"
+    watermark = settings.get("watermark", "None")
+    mods_count = len(settings.get("moderators", []))
 
     text = (
-        "**⚙️ Aᴅᴍɪɴ Cᴏɴᴛʀᴏʟ Pᴀɴᴇʟ**\n\n"
-        "Yᴀʜᴀɴ sᴇ ʙᴏᴛ ᴋᴇ ғᴇᴀᴛᴜʀᴇs ᴅɪʀᴇᴄᴛ ᴏɴ/ᴏғғ ᴋᴀʀᴏ 👇\n\n"
+        "**⚙️ Aᴅᴍɪɴ & Mᴏᴅᴇʀᴀᴛᴏʀ Cᴏɴᴛʀᴏʟ Pᴀɴᴇʟ**\n\n"
         f"🗑 **Auto-Delete:** {'✅ ON — ' + str(auto_delete_min) + ' min' if auto_delete_on else '❌ OFF'}\n"
-        f"🔒 **Protect Content (No-Forward):** {'✅ ON' if protect_on else '❌ OFF'}\n"
+        f"🔒 **Protect Content:** {'✅ ON' if protect_on else '❌ OFF'}\n"
+        f"📝 **Custom Caption:** `{caption_set}`\n"
+        f"🏷 **Watermark Text:** `{watermark}`\n"
+        f"👥 **Moderators Count:** `{mods_count}`\n"
     )
 
     buttons = [
@@ -34,6 +42,8 @@ async def _panel_view():
             f"🔒 Protect Content: {'ON ✅' if protect_on else 'OFF ❌'}",
             callback_data="adm_toggle_protect"
         )],
+        [InlineKeyboardButton("📝 Sᴇᴛ Cᴀᴘᴛɪᴏɴ Tᴇᴍᴘʟᴀᴛᴇ", callback_data="adm_set_caption")],
+        [InlineKeyboardButton("🏷 Sᴇᴛ Wᴀᴛᴇʀᴍᴀʀᴋ Tᴇxᴛ", callback_data="adm_set_watermark")],
         [InlineKeyboardButton("📊 Dᴀᴛᴀʙᴀsᴇ Sᴛᴀᴛᴜs", callback_data="adm_dbstats")],
         [InlineKeyboardButton("Cʟᴏsᴇ 🔐", callback_data="adm_close")],
     ]
@@ -42,7 +52,7 @@ async def _panel_view():
 
 @Client.on_message(filters.command(["admin", "panel"]) & filters.private & filters.incoming)
 async def admin_panel(c, m):
-    if not is_admin(m.from_user.id):
+    if not await is_admin(m.from_user.id):
         return await m.reply_text("🚫 Yʜ Cᴏᴍᴍᴀɴᴅ Sɪʀғ Bᴏᴛ Aᴅᴍɪɴ Kᴇ Lɪʏᴇ Hᴀɪ.", quote=True)
 
     text, markup = await _panel_view()
@@ -51,7 +61,7 @@ async def admin_panel(c, m):
 
 @Client.on_callback_query(filters.regex("^adm_toggle_autodelete$"))
 async def toggle_autodelete(c, m):
-    if not is_admin(m.from_user.id):
+    if not await is_admin(m.from_user.id):
         return await m.answer("🚫 Sɪʀғ Aᴅᴍɪɴ Kᴇ Lɪʏᴇ.", show_alert=True)
 
     settings = await get_settings()
@@ -89,7 +99,7 @@ async def toggle_autodelete(c, m):
 
 @Client.on_callback_query(filters.regex("^adm_toggle_protect$"))
 async def toggle_protect(c, m):
-    if not is_admin(m.from_user.id):
+    if not await is_admin(m.from_user.id):
         return await m.answer("🚫 Sɪʀғ Aᴅᴍɪɴ Kᴇ Lɪʏᴇ.", show_alert=True)
 
     settings = await get_settings()
@@ -101,9 +111,62 @@ async def toggle_protect(c, m):
     await m.message.edit(text, reply_markup=markup)
 
 
+@Client.on_callback_query(filters.regex("^adm_set_caption$"))
+async def set_caption_cb(c, m):
+    if not await is_admin(m.from_user.id):
+        return await m.answer("🚫 Sɪʀғ Aᴅᴍɪɴ Kᴇ Lɪʏᴇ.", show_alert=True)
+
+    await m.answer()
+    try:
+        ask_msg = await c.ask(
+            chat_id=m.from_user.id,
+            text="📝 **Cᴜsᴛᴏᴍ Cᴀᴘᴛɪᴏɴ Tᴇᴍᴘʟᴀᴛᴇ Bʜᴇᴊᴏ:**\n\nAᴠᴀɪʟᴀʙʟᴇ Variables:\n`{file_name}`, `{file_size}`, `{uploader}`, `{downloads}`\n\n__To reset to default send__ `reset`",
+            timeout=120
+        )
+    except Exception:
+        return await c.send_message(m.from_user.id, "⌛ Time Out.")
+
+    if ask_msg.text.strip().lower() == "reset":
+        await update_settings(custom_caption="")
+        await ask_msg.reply_text("✅ Custom Caption reset to Default.")
+    else:
+        await update_settings(custom_caption=ask_msg.text.strip())
+        await ask_msg.reply_text("✅ **Custom Caption Template Saved!**")
+
+    text, markup = await _panel_view()
+    await c.send_message(m.from_user.id, text, reply_markup=markup)
+
+
+@Client.on_callback_query(filters.regex("^adm_set_watermark$"))
+async def set_watermark_cb(c, m):
+    if not await is_admin(m.from_user.id):
+        return await m.answer("🚫 Sɪʀғ Aᴅᴍɪɴ Kᴇ Lɪʏᴇ.", show_alert=True)
+
+    await m.answer()
+    try:
+        ask_msg = await c.ask(
+            chat_id=m.from_user.id,
+            text="🏷 **Wᴀᴛᴇʀᴍᴀʀᴋ / Bʀᴀɴᴅ Tᴇxᴛ Bʜᴇᴊᴏ:**\n\n__(Jaise: `@MyChannelName` ya `My Website`)__\n\n__To disable send__ `none`",
+            timeout=120
+        )
+    except Exception:
+        return await c.send_message(m.from_user.id, "⌛ Time Out.")
+
+    val = ask_msg.text.strip()
+    if val.lower() == "none":
+        await update_settings(watermark="")
+        await ask_msg.reply_text("✅ Watermark Disabled.")
+    else:
+        await update_settings(watermark=val)
+        await ask_msg.reply_text(f"✅ **Watermark set to:** `{val}`")
+
+    text, markup = await _panel_view()
+    await c.send_message(m.from_user.id, text, reply_markup=markup)
+
+
 @Client.on_callback_query(filters.regex("^adm_dbstats$"))
 async def adm_dbstats(c, m):
-    if not is_admin(m.from_user.id):
+    if not await is_admin(m.from_user.id):
         return await m.answer("🚫 Sɪʀғ Aᴅᴍɪɴ Kᴇ Lɪʏᴇ.", show_alert=True)
 
     await m.answer()
