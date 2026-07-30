@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ---------------- Telegram Core ----------------
+# Top-level environment variables
 API_ID = int(os.environ.get("API_ID", 0))
 API_HASH = os.environ.get("API_HASH", "")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
@@ -16,7 +16,6 @@ DB_CHANNEL_ID = int(DB_CHANNEL_ID)
 OWNER_ID = int(os.environ.get("OWNER_ID", 0))
 UPDATE_CHANNEL = os.environ.get("UPDATE_CHANNEL", "").replace("@", "").strip()
 
-# Strict boolean parsing
 IS_PRIVATE = os.environ.get("IS_PRIVATE", "False").strip().lower() in ("true", "1", "yes")
 
 AUTH_USERS = [int(i) for i in os.environ.get("AUTH_USERS", "").split() if i.strip().isdigit()]
@@ -25,7 +24,6 @@ if OWNER_ID and OWNER_ID not in AUTH_USERS:
 
 RATE_LIMIT_PER_MIN = int(os.environ.get("RATE_LIMIT_PER_MIN", 10))
 
-# ---------------- Unlimited Multi-Database MongoDB ----------------
 DB_NAME = os.environ.get("DB_NAME", "TituStoreBot")
 MAX_DB_SIZE_MB = int(os.environ.get("MAX_DB_SIZE_MB", 460))
 
@@ -52,7 +50,17 @@ if not MONGO_URIS:
     raise ValueError("No MongoDB URI found! Set MONGO_URI or DATABASE_URL in environment.")
 
 
-# ---------------- Web Server & FQDN Auto Detection ----------------
+class Telegram:
+    API_ID = API_ID
+    API_HASH = API_HASH
+    BOT_TOKEN = BOT_TOKEN
+    OWNER_ID = OWNER_ID
+    DB_CHANNEL_ID = DB_CHANNEL_ID
+    UPDATE_CHANNEL = UPDATE_CHANNEL
+    IS_PRIVATE = IS_PRIVATE
+    AUTH_USERS = AUTH_USERS
+
+
 def _detect_fqdn():
     manual = os.environ.get("FQDN")
     if manual:
