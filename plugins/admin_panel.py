@@ -25,7 +25,7 @@ async def _panel_view():
     mods_count = len(settings.get("moderators", []))
 
     text = (
-        "**⚙️ Aᴅᴍɪɴ & Mᴏᴅᴇʀᴀᴛᴏʀ Cᴏɴᴛʀᴏʟ Pᴀɴᴇʟ**\n\n"
+        "⚙️ **ADMIN & MODERATOR CONTROL PANEL**\n\n"
         f"🗑 **Auto-Delete:** {'✅ ON — ' + str(auto_delete_min) + ' min' if auto_delete_on else '❌ OFF'}\n"
         f"🔒 **Protect Content:** {'✅ ON' if protect_on else '❌ OFF'}\n"
         f"📝 **Custom Caption:** `{caption_set}`\n"
@@ -35,17 +35,17 @@ async def _panel_view():
 
     buttons = [
         [InlineKeyboardButton(
-            f"🗑 Auto-Delete: {'ON ✅' if auto_delete_on else 'OFF ❌'}",
-            callback_data="adm_toggle_autodelete"
+            f"🗑 Auto-Delete: {'ON (' + str(auto_delete_min) + 'm) ✅' if auto_delete_on else 'OFF ❌'}",
+            callback_data="adm_autodel_menu"
         )],
         [InlineKeyboardButton(
             f"🔒 Protect Content: {'ON ✅' if protect_on else 'OFF ❌'}",
             callback_data="adm_toggle_protect"
         )],
-        [InlineKeyboardButton("📝 Sᴇᴛ Cᴀᴘᴛɪᴏɴ Tᴇᴍᴘʟᴀᴛᴇ", callback_data="adm_set_caption")],
-        [InlineKeyboardButton("🏷 Sᴇᴛ Wᴀᴛᴇʀᴍᴀʀᴋ Tᴇxᴛ", callback_data="adm_set_watermark")],
-        [InlineKeyboardButton("📊 Dᴀᴛᴀʙᴀsᴇ Sᴛᴀᴛᴜs", callback_data="adm_dbstats")],
-        [InlineKeyboardButton("Cʟᴏsᴇ 🔐", callback_data="adm_close")],
+        [InlineKeyboardButton("📝 Set Caption Template", callback_data="adm_info_caption")],
+        [InlineKeyboardButton("🏷 Set Watermark Text", callback_data="adm_info_watermark")],
+        [InlineKeyboardButton("📊 DATABASE STATUS", callback_data="adm_dbstats")],
+        [InlineKeyboardButton("CLOSE 🔐", callback_data="adm_close")],
     ]
     return text, InlineKeyboardMarkup(buttons)
 
@@ -59,44 +59,52 @@ async def admin_panel(c, m):
     await m.reply_text(text, reply_markup=markup, quote=True)
 
 
-@Client.on_callback_query(filters.regex("^adm_toggle_autodelete$"))
-async def toggle_autodelete(c, m):
+# Auto Delete Menu
+@Client.on_callback_query(filters.regex("^adm_autodel_menu$"))
+async def autodel_menu(c, m):
     if not await is_admin(m.from_user.id):
         return await m.answer("🚫 Sɪʀғ Aᴅᴍɪɴ Kᴇ Lɪʏᴇ.", show_alert=True)
 
-    settings = await get_settings()
+    await m.answer()
+    buttons = [
+        [
+            InlineKeyboardButton("5 Min ⏱", callback_data="adm_set_autodel_300"),
+            InlineKeyboardButton("10 Min ⏱", callback_data="adm_set_autodel_600"),
+            InlineKeyboardButton("15 Min ⏱", callback_data="adm_set_autodel_900"),
+        ],
+        [
+            InlineKeyboardButton("30 Min ⏱", callback_data="adm_set_autodel_1800"),
+            InlineKeyboardButton("1 Hour ⏱", callback_data="adm_set_autodel_3600"),
+            InlineKeyboardButton("2 Hours ⏱", callback_data="adm_set_autodel_7200"),
+        ],
+        [InlineKeyboardButton("Disable Auto-Delete ❌", callback_data="adm_set_autodel_0")],
+        [InlineKeyboardButton("🔙 Back to Panel", callback_data="adm_back")]
+    ]
+    await m.message.edit(
+        "⏱ **Select Auto-Delete Timer:**\n\nChoose how long files remain before being automatically deleted:",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
 
-    if settings.get("auto_delete", False):
+
+@Client.on_callback_query(filters.regex("^adm_set_autodel_"))
+async def set_autodel(c, m):
+    if not await is_admin(m.from_user.id):
+        return await m.answer("🚫 Sɪʀғ Aᴅᴍɪɴ Kᴇ Lɪʏᴇ.", show_alert=True)
+
+    seconds = int(m.data.split("_")[3])
+    if seconds == 0:
         await update_settings(auto_delete=False)
-        await m.answer("❌ Auto-Delete OFF ᴋᴀʀ ᴅɪʏᴀ ɢᴀʏᴀ.", show_alert=True)
+        await m.answer("❌ Auto-Delete Disabled!", show_alert=True)
     else:
-        await m.answer()
-        try:
-            ask_msg = await c.ask(
-                chat_id=m.from_user.id,
-                text="⏱ Kɪᴛɴᴇ **minutes** ʙᴀᴀᴅ ғɪʟᴇ ᴀᴜᴛᴏ-ᴅᴇʟᴇᴛᴇ ʜᴏɴɪ ᴄʜᴀʜɪʏᴇ?\n__(sɪʀғ number ʙʜᴇᴊᴏ, ᴊᴀɪsᴇ__ `30` __)__",
-                timeout=60
-            )
-        except Exception:
-            return await c.send_message(m.from_user.id, "⌛ Tɪᴍᴇ Oᴜᴛ. Vᴀᴘᴀs `/admin` sᴇ ᴛʀʏ ᴋᴀʀᴏ.")
-
-        try:
-            minutes = int(ask_msg.text.strip())
-            if minutes <= 0:
-                raise ValueError
-        except (ValueError, AttributeError):
-            return await ask_msg.reply_text("⚠️ Gᴀʟᴀᴛ Vᴀʟᴜᴇ. Vᴀᴘᴀs `/admin` sᴇ ᴛʀʏ ᴋᴀʀᴏ.")
-
-        await update_settings(auto_delete=True, auto_delete_seconds=minutes * 60)
-        await ask_msg.reply_text(f"✅ **Auto-Delete ON** — Fɪʟᴇs ᴀʙ **{minutes} minute(s)** ʙᴀᴀᴅ ᴀᴜᴛᴏ-ᴅᴇʟᴇᴛᴇ ʜᴏɴɢɪ.")
+        minutes = seconds // 60
+        await update_settings(auto_delete=True, auto_delete_seconds=seconds)
+        await m.answer(f"✅ Auto-Delete set to {minutes} minutes!", show_alert=True)
 
     text, markup = await _panel_view()
-    try:
-        await m.message.edit(text, reply_markup=markup)
-    except Exception:
-        pass
+    await m.message.edit(text, reply_markup=markup)
 
 
+# Protect Content Toggle
 @Client.on_callback_query(filters.regex("^adm_toggle_protect$"))
 async def toggle_protect(c, m):
     if not await is_admin(m.from_user.id):
@@ -105,63 +113,77 @@ async def toggle_protect(c, m):
     settings = await get_settings()
     new_state = not settings.get("protect_content", False)
     await update_settings(protect_content=new_state)
-    await m.answer(f"🔒 Protect Content {'ON ✅' if new_state else 'OFF ❌'} ᴋᴀʀ ᴅɪʏᴀ ɢᴀʏᴀ.", show_alert=True)
+    await m.answer(f"🔒 Protect Content {'ON ✅' if new_state else 'OFF ❌'}!", show_alert=True)
 
     text, markup = await _panel_view()
     await m.message.edit(text, reply_markup=markup)
 
 
-@Client.on_callback_query(filters.regex("^adm_set_caption$"))
-async def set_caption_cb(c, m):
+# Caption Info
+@Client.on_callback_query(filters.regex("^adm_info_caption$"))
+async def info_caption(c, m):
+    await m.answer()
+    settings = await get_settings()
+    curr = settings.get("custom_caption", "Default Caption (None)")
+
+    buttons = [
+        [InlineKeyboardButton("Reset Caption to Default 🔄", callback_data="adm_reset_caption")],
+        [InlineKeyboardButton("🔙 Back to Panel", callback_data="adm_back")]
+    ]
+    msg_text = (
+        "📝 **CUSTOM CAPTION CONFIGURATION**\n\n"
+        f"**Current Template:**\n`{curr}`\n\n"
+        "**How to set a custom caption?**\n"
+        "Send command:\n`/setcaption Your Custom Template Here`\n\n"
+        "**Available Placeholders:**\n"
+        "`{file_name}` - File Name\n"
+        "`{file_size}` - File Size\n"
+        "`{uploader}` - Uploader Mention\n"
+        "`{downloads}` - Download Count"
+    )
+    await m.message.edit(msg_text, reply_markup=InlineKeyboardMarkup(buttons))
+
+
+@Client.on_callback_query(filters.regex("^adm_reset_caption$"))
+async def reset_caption_cb(c, m):
     if not await is_admin(m.from_user.id):
         return await m.answer("🚫 Sɪʀғ Aᴅᴍɪɴ Kᴇ Lɪʏᴇ.", show_alert=True)
 
-    await m.answer()
-    try:
-        ask_msg = await c.ask(
-            chat_id=m.from_user.id,
-            text="📝 **Cᴜsᴛᴏᴍ Cᴀᴘᴛɪᴏɴ Tᴇᴍᴘʟᴀᴛᴇ Bʜᴇᴊᴏ:**\n\nAᴠᴀɪʟᴀʙʟᴇ Variables:\n`{file_name}`, `{file_size}`, `{uploader}`, `{downloads}`\n\n__To reset to default send__ `reset`",
-            timeout=120
-        )
-    except Exception:
-        return await c.send_message(m.from_user.id, "⌛ Time Out.")
-
-    if ask_msg.text.strip().lower() == "reset":
-        await update_settings(custom_caption="")
-        await ask_msg.reply_text("✅ Custom Caption reset to Default.")
-    else:
-        await update_settings(custom_caption=ask_msg.text.strip())
-        await ask_msg.reply_text("✅ **Custom Caption Template Saved!**")
-
+    await update_settings(custom_caption="")
+    await m.answer("✅ Custom Caption reset to default!", show_alert=True)
     text, markup = await _panel_view()
-    await c.send_message(m.from_user.id, text, reply_markup=markup)
+    await m.message.edit(text, reply_markup=markup)
 
 
-@Client.on_callback_query(filters.regex("^adm_set_watermark$"))
-async def set_watermark_cb(c, m):
+# Watermark Info
+@Client.on_callback_query(filters.regex("^adm_info_watermark$"))
+async def info_watermark(c, m):
+    await m.answer()
+    settings = await get_settings()
+    curr = settings.get("watermark", "None")
+
+    buttons = [
+        [InlineKeyboardButton("Remove Watermark ❌", callback_data="adm_remove_watermark")],
+        [InlineKeyboardButton("🔙 Back to Panel", callback_data="adm_back")]
+    ]
+    msg_text = (
+        "🏷 **WATERMARK TEXT CONFIGURATION**\n\n"
+        f"**Current Watermark:** `{curr}`\n\n"
+        "**How to set a custom watermark?**\n"
+        "Send command:\n`/setwatermark @YourChannelName`"
+    )
+    await m.message.edit(msg_text, reply_markup=InlineKeyboardMarkup(buttons))
+
+
+@Client.on_callback_query(filters.regex("^adm_remove_watermark$"))
+async def remove_watermark_cb(c, m):
     if not await is_admin(m.from_user.id):
         return await m.answer("🚫 Sɪʀғ Aᴅᴍɪɴ Kᴇ Lɪʏᴇ.", show_alert=True)
 
-    await m.answer()
-    try:
-        ask_msg = await c.ask(
-            chat_id=m.from_user.id,
-            text="🏷 **Wᴀᴛᴇʀᴍᴀʀᴋ / Bʀᴀɴᴅ Tᴇxᴛ Bʜᴇᴊᴏ:**\n\n__(Jaise: `@MyChannelName` ya `My Website`)__\n\n__To disable send__ `none`",
-            timeout=120
-        )
-    except Exception:
-        return await c.send_message(m.from_user.id, "⌛ Time Out.")
-
-    val = ask_msg.text.strip()
-    if val.lower() == "none":
-        await update_settings(watermark="")
-        await ask_msg.reply_text("✅ Watermark Disabled.")
-    else:
-        await update_settings(watermark=val)
-        await ask_msg.reply_text(f"✅ **Watermark set to:** `{val}`")
-
+    await update_settings(watermark="")
+    await m.answer("✅ Watermark Removed!", show_alert=True)
     text, markup = await _panel_view()
-    await c.send_message(m.from_user.id, text, reply_markup=markup)
+    await m.message.edit(text, reply_markup=markup)
 
 
 @Client.on_callback_query(filters.regex("^adm_dbstats$"))
@@ -171,12 +193,20 @@ async def adm_dbstats(c, m):
 
     await m.answer()
     status = await get_db_status()
-    text = "**🗄 Mᴜʟᴛɪ-Dᴀᴛᴀʙᴀsᴇ Sᴛᴀᴛᴜs:**\n\n"
+    text = "**🗄 MULTI-DATABASE STATUS:**\n\n"
     for s in status:
-        marker = "🟢 ᴀᴄᴛɪᴠᴇ" if s["active"] else "⚪️ sᴛᴀɴᴅʙʏ"
+        marker = "🟢 ACTIVE" if s["active"] else "⚪️ STANDBY"
         text += f"**DB #{s['index']}** — {s['size_mb']} / {s['limit_mb']} MB — {marker}\n"
 
-    await m.message.reply_text(text)
+    buttons = [[InlineKeyboardButton("🔙 Back to Panel", callback_data="adm_back")]]
+    await m.message.edit(text, reply_markup=InlineKeyboardMarkup(buttons))
+
+
+@Client.on_callback_query(filters.regex("^adm_back$"))
+async def adm_back(c, m):
+    await m.answer()
+    text, markup = await _panel_view()
+    await m.message.edit(text, reply_markup=markup)
 
 
 @Client.on_callback_query(filters.regex("^adm_close$"))
