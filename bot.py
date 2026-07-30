@@ -1,12 +1,11 @@
 from logger import logging
-
 from pyromod import listen
 from pyrogram import Client
-
 from config import API_HASH, API_ID, BOT_TOKEN
 
-logger = logging.getLogger(__name__)
+from keep_alive import keep_alive
 
+logger = logging.getLogger(__name__)
 
 def main():
     plugins = dict(root="plugins")
@@ -21,8 +20,8 @@ def main():
     )
 
     logger.info("TituStoreBot is starting...")
+    keep_alive()
     app.run()
-
 
 if __name__ == "__main__":
     main()
