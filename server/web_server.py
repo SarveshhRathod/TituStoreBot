@@ -5,13 +5,60 @@ import jinja2
 from aiohttp import web
 from pyrogram.file_id import FileId
 from config import Server, DB_CHANNEL_ID
-from database.database import get_downloads, increment_downloads
 from server.byte_streamer import ByteStreamer, multi_clients, work_loads
 from logger import logging
 
 logger = logging.getLogger(__name__)
 routes = web.RouteTableDef()
 class_cache = {}
+
+PLAY_TEMPLATE_STR = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TituStoreBot Stream | {{file_name}}</title>
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0b0f17; color: #e5e7eb; font-family: sans-serif; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+    <div class="max-w-4xl w-full bg-gray-900 rounded-xl overflow-hidden shadow-2xl border border-gray-800 p-4">
+        <h2 class="text-xl font-bold text-green-400 mb-2 truncate">🎬 {{file_name}}</h2>
+        <p class="text-sm text-gray-400 mb-4">📦 Size: {{file_size}}</p>
+
+        <div class="rounded-lg overflow-hidden bg-black mb-6">
+            <video id="player" class="player" src="{{file_url}}" playsinline controls width="100%"></video>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <a href="{{file_url}}" download="{{file_name}}" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg text-center text-sm transition">
+                📥 Download Video
+            </a>
+            <button onclick="navigator.clipboard.writeText('{{file_url}}'); alert('Stream Link Copied!')" class="bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2.5 px-4 rounded-lg text-center text-sm transition">
+                🔗 Copy Link
+            </button>
+            <a href="vlc://{{file_url}}" class="bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2.5 px-4 rounded-lg text-center text-sm transition">
+                🍊 VLC Player
+            </a>
+            <a href="intent:{{file_url}}#Intent;package=com.mxtech.videoplayer.ad;type=video/*;end" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-4 rounded-lg text-center text-sm transition">
+                📺 MX Player
+            </a>
+        </div>
+    </div>
+
+    <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+    <script>
+        const player = new Plyr('#player', {
+            controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'settings', 'pip', 'fullscreen'],
+            settings: ['speed'],
+            speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] }
+        });
+    </script>
+</body>
+</html>"""
 
 
 def decode_id(base64_string: str) -> str:
@@ -62,9 +109,7 @@ async def stream_page_handler(request: web.Request):
 
         src = urllib.parse.urljoin(Server.URL, f'dl/{path}')
 
-        with open("templates/play.html") as f:
-            template = jinja2.Template(f.read())
-
+        template = jinja2.Template(PLAY_TEMPLATE_STR)
         html_out = template.render(
             file_name=file_name,
             file_url=src,
