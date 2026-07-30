@@ -4,10 +4,16 @@ import base64
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from config import AUTH_USERS, DB_CHANNEL_ID, IS_PRIVATE, OWNER_ID
-from database.database import get_data, update_as_name
+from config import AUTH_USERS, DB_CHANNEL_ID, IS_PRIVATE, OWNER_ID, WEB_URL
+from database.database import (
+    get_data, get_downloads, get_settings, increment_downloads,
+    set_user_lang, update_as_name, update_settings
+)
 from logger import logging
-from .utils import format_minutes, safe_copy, schedule_auto_delete
+from .utils import (
+    format_caption, format_minutes, is_rate_limited,
+    safe_copy, schedule_auto_delete, tr
+)
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +22,10 @@ BATCH = []
 
 @Client.on_message(filters.command('start') & filters.incoming & filters.private)
 async def start(c, m, cb=False):
+    if is_rate_limited(m.from_user.id):
+        msg = await tr(m.from_user.id, "rate_limit")
+        return await m.reply_text(msg, quote=True)
+
     if not cb:
         send_msg = await m.reply_text("**Pʀᴏᴄᴇssɪɴɢ...**", quote=True)
 
@@ -27,22 +37,12 @@ async def start(c, m, cb=False):
     except Exception:
         owner_username = 'SarveshhRathod'
 
-    text = f"""**Hᴇʏ!** {m.from_user.mention}
-
-🤗 **I'm TituStoreBot**
-
-‣ Yᴏᴜ ᴄᴀɴ sᴛᴏʀᴇ ʏᴏᴜʀ Tᴇʟᴇɢʀᴀᴍ Mᴇᴅɪᴀ ғᴏʀ ᴘᴇʀᴍᴀɴᴇɴᴛ Lɪɴᴋ! ᴀɴᴅ Sʜᴀʀᴇ Aɴʏᴡʜᴇʀᴇ.
-
-‣ Cʟɪᴄᴋ ᴏɴ Hᴇʟᴘ ᴀɴᴅ Kɴᴏᴡ Mᴏʀᴇ Aʙᴏᴜᴛ Usɪɴɢ ᴍᴇ.
-
-__🚸 Pᴏʀɴ Cᴏɴᴛᴇɴᴛ Nᴏᴛ Aʟʟᴏᴡᴇᴅ Oɴ Tʜᴇ Bᴏᴛ__
-
-**💞 Mᴀɪɴᴛᴀɪɴᴇᴅ Bʏ:** {owner_mention}
-"""
+    text = await tr(m.from_user.id, "start", mention=m.from_user.mention)
 
     buttons = [[
         InlineKeyboardButton('Hᴇʟᴘ 💡', callback_data="help"),
         InlineKeyboardButton('Aʙᴏᴜᴛ 👑', callback_data="about")], [
+        InlineKeyboardButton('🌐 Lᴀɴɢᴜᴀɢᴇ', callback_data="setlang_menu"),
         InlineKeyboardButton('Mʏ Fᴀᴛʜᴇʀ 👨‍✈️', url=f"https://t.me/{owner_username}"),
     ]]
 
@@ -59,6 +59,21 @@ __🚸 Pᴏʀɴ Cᴏɴᴛᴇɴᴛ Nᴏᴛ Aʟʟᴏᴡᴇᴅ Oɴ Tʜᴇ Bᴏᴛ__
         except Exception:
             decoded_param = param
 
+        # Password / PIN Check
+        if "_pin" in decoded_param:
+            raw_param, pin_code = decoded_param.split("_pin")
+            try:
+                ask_pin = await c.ask(
+                    chat_id=m.from_user.id,
+                    text=await tr(m.from_user.id, "pin_prompt"),
+                    timeout=60
+                )
+                if ask_pin.text.strip() != pin_code:
+                    return await ask_pin.reply_text(await tr(m.from_user.id, "pin_wrong"))
+            except Exception:
+                return await send_msg.edit("⌛ PIN Verification Timeout.")
+            decoded_param = raw_param
+
         if 'batch_' in decoded_param:
             await send_msg.delete()
             try:
@@ -67,33 +82,30 @@ __🚸 Pᴏʀɴ Cᴏɴᴛᴇɴᴛ Nᴏᴛ Aʟʟᴏᴡᴇᴅ Oɴ Tʜᴇ Bᴏᴛ__
 
                 if string.empty:
                     return await m.reply_text(
-                        f"🥴 Sᴏʀʀʏ ʙʀᴏ ʏᴏᴜʀ ғɪʟᴇ ᴡᴀs ᴅᴇʟᴇᴛᴇᴅ ʙʏ ғɪʟᴇ ᴏᴡɴᴇʀ ᴏʀ ʙᴏᴛ ᴏᴡɴᴇʀ\n\n"
-                        f"Fᴏʀ ᴍᴏʀᴇ ʜᴇʟᴘ ᴄᴏɴᴛᴀᴄᴛ ᴍʏ ᴏᴡɴᴇʀ👉 {owner_mention}"
+                        f"🥴 Sᴏʀʀʏ ʙʀᴏ ʏᴏᴜʀ ғɪʟᴇ ᴡᴀs ᴅᴇʟᴇᴛᴇᴅ\n\nFᴏʀ ᴍᴏʀᴇ ʜᴇʟᴘ ᴄᴏɴᴛᴀᴄᴛ {owner_mention}"
                     )
-                
+
                 decoded_msg_ids = await decode(string.text)
                 message_ids = decoded_msg_ids.split('-')
-                
+
                 delay = None
                 for msg_id in message_ids:
                     msg = await c.get_messages(DB_CHANNEL_ID, int(msg_id))
-
                     if msg.empty:
                         continue
 
+                    downloads = await increment_downloads(f"{chat_id}_{msg_id}")
                     sent = await safe_copy(msg, m.from_user.id)
                     delay = await schedule_auto_delete(sent)
                     await asyncio.sleep(0.3)
 
                 if delay:
-                    await c.send_message(
-                        m.from_user.id,
-                        f"⏳ Yʜ Fɪʟᴇs **{format_minutes(delay)}** ᴍᴇ ᴀᴜᴛᴏ-ᴅᴇʟᴇᴛᴇ ʜᴏ ᴊᴀʏᴇɴɢɪ."
-                    )
+                    del_text = await tr(m.from_user.id, "auto_del_msg", time=format_minutes(delay))
+                    await c.send_message(m.from_user.id, del_text)
                 return
             except Exception as e:
                 logger.error(f"Error handling batch: {e}")
-                return await m.reply_text(f"🥴 Sᴏʀʀʏ, error retrieving batch files. Contact {owner_mention}")
+                return await m.reply_text(f"🥴 Error retrieving batch files. Contact {owner_mention}")
 
         try:
             chat_id, msg_id = decoded_param.split('_')
@@ -101,40 +113,53 @@ __🚸 Pᴏʀɴ Cᴏɴᴛᴇɴᴛ Nᴏᴛ Aʟʟᴏᴡᴇᴅ Oɴ Tʜᴇ Bᴏᴛ__
 
             if msg.empty:
                 return await send_msg.edit(
-                    f"🥴 Sᴏʀʀʏ ʙʀᴏ ʏᴏᴜʀ ғɪʟᴇ ᴡᴀs ᴅᴇʟᴇᴛᴇᴅ ʙʏ ғɪʟᴇ ᴏᴡɴᴇʀ ᴏʀ ʙᴏᴛ ᴏᴡɴᴇʀ\n\n"
-                    f"Fᴏʀ ᴍᴏʀᴇ ʜᴇʟᴘ ᴄᴏɴᴛᴀᴄᴛ ᴍʏ ᴏᴡɴᴇʀ 👉 {owner_mention}"
+                    f"🥴 Sᴏʀʀʏ ʙʀᴏ ʏᴏᴜʀ ғɪʟᴇ ᴡᴀs ᴅᴇʟᴇᴛᴇᴅ\n\nFᴏʀ ᴍᴏʀᴇ ʜᴇʟᴘ ᴄᴏɴᴛᴀᴄᴛ {owner_mention}"
                 )
 
-            caption = f"{msg.caption.markdown}\n\n\n" if msg.caption else ""
-            as_uploadername = (await get_data(chat_id)).up_name
+            downloads = await increment_downloads(f"{chat_id}_{msg_id}")
+            media = msg.document or msg.video or msg.audio or msg.photo
+            media_name = getattr(media, "file_name", "File")
+            media_size = humanbytes(getattr(media, "file_size", 0))
 
-            if as_uploadername:
-                if str(chat_id).startswith('-100'):
-                    channel = await c.get_chat(int(chat_id))
-                    caption += "\n\n\n**--Uᴘʟᴏᴀᴅᴇʀ Dᴇᴛᴀɪʟs:--**\n\n"
-                    caption += f"**📢 Cʜᴀɴɴᴇʟ Nᴀᴍᴇ:** __{channel.title}__\n\n"
-                    caption += f"**🗣 Usᴇʀ Nᴀᴍᴇ:** @{channel.username}\n\n" if channel.username else ""
-                    caption += f"**👤 Cʜᴀɴɴᴇʟ Iᴅ:** __{channel.id}__\n\n"
-                else:
-                    user = await c.get_users(int(chat_id))
-                    caption += "\n\n\n**--Uᴘʟᴏᴀᴅᴇʀ Dᴇᴛᴀɪʟs:--**\n\n"
-                    caption += f"**🍁 Nᴀᴍᴇ:** [{user.first_name}](tg://user?id={user.id})\n\n"
-                    caption += f"**🖋 Usᴇʀ Nᴀᴍᴇ:** @{user.username}\n\n" if user.username else ""
+            uploader = f"[{m.from_user.first_name}](tg://user?id={m.from_user.id})"
+            caption = await format_caption(media_name, media_size, uploader, downloads, msg.caption.markdown if msg.caption else "")
 
             await send_msg.delete()
             sent = await safe_copy(msg, m.from_user.id, caption=caption)
             delay = await schedule_auto_delete(sent)
             if delay:
-                await m.reply_text(f"⏳ Yʜ Fɪʟᴇ **{format_minutes(delay)}** ᴍᴇ ᴀᴜᴛᴏ-ᴅᴇʟᴇᴛᴇ ʜᴏ ᴊᴀʏᴇɢɪ.")
+                del_text = await tr(m.from_user.id, "auto_del_msg", time=format_minutes(delay))
+                await m.reply_text(del_text)
         except Exception as e:
-            logger.error(f"Error serving single file: {e}")
-            await send_msg.edit(f"🥴 Sᴏʀʀʏ, invalid or expired file link. Contact {owner_mention}")
+            logger.error(f"Error serving file: {e}")
+            await send_msg.edit(f"🥴 Invalid or expired file link. Contact {owner_mention}")
 
     else:
         await send_msg.edit(
             text=text,
             reply_markup=InlineKeyboardMarkup(buttons)
         )
+
+
+@Client.on_message(filters.command('lang') & filters.private & filters.incoming)
+async def lang_cmd(c, m):
+    buttons = [
+        [InlineKeyboardButton("English 🇬🇧", callback_data="setlang_en")],
+        [InlineKeyboardButton("Hindi 🇮🇳", callback_data="setlang_hi")],
+        [InlineKeyboardButton("Hinglish 💬", callback_data="setlang_hn")]
+    ]
+    await m.reply_text("🌐 **Sᴇʟᴇᴄᴛ Yᴏᴜʀ Pʀᴇғᴇʀʀᴇᴅ Lᴀɴɢᴜᴀɢᴇ:**", reply_markup=InlineKeyboardMarkup(buttons), quote=True)
+
+
+@Client.on_callback_query(filters.regex("^setlang_menu$"))
+async def lang_menu_cb(c, m):
+    await m.answer()
+    buttons = [
+        [InlineKeyboardButton("English 🇬🇧", callback_data="setlang_en")],
+        [InlineKeyboardButton("Hindi 🇮🇳", callback_data="setlang_hi")],
+        [InlineKeyboardButton("Hinglish 💬", callback_data="setlang_hn")]
+    ]
+    await m.message.edit("🌐 **Sᴇʟᴇᴄᴛ Yᴏᴜʀ Pʀᴇғᴇʀʀᴇᴅ Lᴀɴɢᴜᴀɢᴇ:**", reply_markup=InlineKeyboardMarkup(buttons))
 
 
 @Client.on_message(filters.command('me') & filters.incoming & filters.private)
@@ -165,7 +190,7 @@ async def batch(c, m):
             try:
                 media = await c.ask(
                     chat_id=m.from_user.id,
-                    text='Sᴇɴᴅ ᴍᴇ sᴏᴍᴇ ғɪʟᴇs ᴏʀ ᴠɪᴅᴇᴏs ᴏʀ ᴘʜᴏᴛᴏs ᴏʀ ᴛᴇxᴛ ᴏʀ ᴀᴜᴅɪᴏ. Iғ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ᴄᴀɴᴄᴇʟ ᴛʜᴇ ᴘʀᴏᴄᴇss sᴇɴᴅ /cancel',
+                    text='Sᴇɴᴅ ᴍᴇ sᴏᴍᴇ ғɪʟᴇs ᴏʀ ᴠɪᴅᴇᴏs ᴏʀ ᴘʜᴏᴛᴏs. Send /cancel to stop.',
                     timeout=300
                 )
             except Exception:
@@ -182,7 +207,7 @@ async def batch(c, m):
                 reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton('Dᴏɴᴇ ✅', callback_data='done')]])
                 media = await c.ask(
                     chat_id=m.from_user.id,
-                    text='Oᴋ 😉. Nᴏᴡ sᴇɴᴅ ᴍᴇ sᴏᴍᴇ ᴍᴏʀᴇ ғɪʟᴇs Oʀ ᴘʀᴇss ᴅᴏɴᴇ ᴛᴏ ɢᴇᴛ sʜᴀʀᴇᴀʙʟᴇ ʟɪɴᴋ. Iғ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ᴄᴀɴᴄᴇʟ ᴛʜᴇ ᴘʀᴏᴄᴇss sᴇɴᴅ /cancel',
+                    text='Oᴋ 😉. Send more files or press Done to get shareable link. Send /cancel to stop.',
                     reply_markup=reply_markup,
                     timeout=300
                 )
@@ -228,11 +253,62 @@ async def set_mode(c, m):
     caption_mode = (await get_data(usr)).up_name
     if caption_mode:
         await update_as_name(usr, False)
-        text = "Uᴘʟᴏᴀᴅᴇʀ Dᴇᴛᴀɪʟs ɪɴ Cᴀᴘᴛɪᴏɴ: **Dɪsᴀʙʟᴇᴅ ❌**"
+        text = "Uᴘʟᴏᴀᴅᴇʀ Dᴇᴛᴀɪʟs ɪɴ Cᴀᴘᴛɪᴏɴ: **Dɪsᴀ┴ʟᴇᴅ ❌**"
     else:
         await update_as_name(usr, True)
         text = "Uᴘʟᴏᴀᴅᴇʀ Dᴇᴛᴀɪʟs ɪɴ Cᴀᴘᴛɪᴏɴ: **Eɴᴀʙʟᴇᴅ ✔️**"
     await m.reply_text(text, quote=True)
+
+
+# Multi-Admin Moderator Commands
+@Client.on_message(filters.command('addmod') & filters.incoming & filters.private)
+async def add_mod(c, m):
+    if m.from_user.id != OWNER_ID:
+        return await m.reply_text("🚫 Sɪʀғ Bᴏᴛ Oᴡɴᴇʀ ʜɪ Mᴏᴅᴇʀᴀᴛᴏʀ ᴀᴅᴅ ᴋᴀʀ sᴀᴋᴛᴀ ʜᴀɪ.")
+
+    if len(m.command) < 2:
+        return await m.reply_text("Usage: `/addmod <user_id>`")
+
+    target_id = int(m.command[1])
+    settings = await get_settings()
+    mods = settings.get("moderators", [])
+    if target_id not in mods:
+        mods.append(target_id)
+        await update_settings(moderators=mods)
+        await m.reply_text(f"✅ User `{target_id}` is now a Moderator.")
+    else:
+        await m.reply_text("⚠️ User is already a Moderator.")
+
+
+@Client.on_message(filters.command('rmmod') & filters.incoming & filters.private)
+async def rm_mod(c, m):
+    if m.from_user.id != OWNER_ID:
+        return await m.reply_text("🚫 Sɪʀғ Bᴏᴛ Oᴡɴᴇʀ ʜɪ Mᴏᴅᴇʀᴀᴛᴏʀ remove ᴋᴀʀ sᴀᴋᴛᴀ ʜᴀɪ.")
+
+    if len(m.command) < 2:
+        return await m.reply_text("Usage: `/rmmod <user_id>`")
+
+    target_id = int(m.command[1])
+    settings = await get_settings()
+    mods = settings.get("moderators", [])
+    if target_id in mods:
+        mods.remove(target_id)
+        await update_settings(moderators=mods)
+        await m.reply_text(f"✅ User `{target_id}` removed from Moderators.")
+    else:
+        await m.reply_text("⚠️ User is not a Moderator.")
+
+
+def humanbytes(size):
+    if not size:
+        return "0 B"
+    power = 2 ** 10
+    n = 0
+    dic_power_n = {0: ' ', 1: 'K', 2: 'M', 3: 'G', 4: 'T'}
+    while size > power:
+        size /= power
+        n += 1
+    return str(round(size, 2)) + " " + dic_power_n[n] + 'B'
 
 
 async def decode(base64_string: str) -> str:
