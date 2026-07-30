@@ -259,19 +259,19 @@ def watch_stream(file_id):
                         chunk_queue.put(chunk)
                     chunk_queue.put(None)
                 except Exception as err:
-                    logger.error(f"Async fetch chunk error: {err}")
                     chunk_queue.put(None)
 
             asyncio.run_coroutine_threadsafe(_fetch_chunks(), loop)
 
             while True:
                 try:
-                    chunk = chunk_queue.get(timeout=20)
+                    chunk = chunk_queue.get(timeout=10)
                     if chunk is None:
                         break
                     yield chunk
-                except Exception as e:
-                    logger.error(f"Buffered queue read error: {e}")
+                except queue.Empty:
+                    break
+                except Exception:
                     break
 
         response = Response(
