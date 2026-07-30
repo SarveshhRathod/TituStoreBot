@@ -54,6 +54,7 @@ async def get_db_status():
     return status
 
 
+# User Settings
 async def update_as_name(id_val, mode: bool):
     id_str = str(id_val)
     for db in _dbs:
@@ -85,13 +86,16 @@ class _Row:
         self.up_name = up_name
 
 
-# ---------------- Global bot settings ----------------
+# ---------------- Global Bot Settings ----------------
 _SETTINGS_ID = "global"
 DEFAULT_SETTINGS = {
     "_id": _SETTINGS_ID,
     "auto_delete": False,
     "auto_delete_seconds": 600,
     "protect_content": False,
+    "custom_caption": "",
+    "watermark": "",
+    "moderators": [],
 }
 
 
@@ -117,3 +121,65 @@ async def update_settings(**kwargs) -> None:
     doc = DEFAULT_SETTINGS.copy()
     doc.update(kwargs)
     await db.bot_config.update_one({"_id": _SETTINGS_ID}, {"$set": doc}, upsert=True)
+
+
+# ---------------- Deduplication System ----------------
+async def get_indexed_file(file_unique_id: str):
+    for db in _dbs:
+        doc = await db.file_index.find_one({"_id": file_unique_id})
+        if doc:
+            return doc
+    return None
+
+
+async def save_file_index(file_unique_id: str, msg_id: int, chat_id: int):
+    db = await get_active_db()
+    await db.file_index.update_one(
+        {"_id": file_unique_id},
+        {"$set": {"msg_id": msg_id, "chat_id": chat_id}},
+        upsert=True
+    )
+
+
+# ---------------- Download Counter ----------------
+async def increment_downloads(file_key: str) -> int:
+    for db in _dbs:
+        doc = await db.downloads.find_one({"_id": file_key})
+        if doc:
+            new_count = doc.get("count", 0) + 1
+            await db.downloads.update_one({"_id": file_key}, {"$set": {"count": new_count}})
+            return new_count
+
+    db = await get_active_db()
+    await db.downloads.insert_one({"_id": file_key, "count": 1})
+    return 1
+
+
+async def get_downloads(file_key: str) -> int:
+    for db in _dbs:
+        doc = await db.downloads.find_one({"_id": file_key})
+        if doc:
+            return doc.get("count", 0)
+    return 0
+
+
+# ---------------- Language Preferences ----------------
+async def get_user_lang(user_id: int) -> str:
+    user_str = str(user_id)
+    for db in _dbs:
+        doc = await db.user_langs.find_one({"_id": user_str})
+        if doc:
+            return doc.get("lang", "en")
+    return "en"
+
+
+async def set_user_lang(user_id: int, lang: str):
+    user_str = str(user_id)
+    for db in _dbs:
+        existing = await db.user_langs.find_one({"_id": user_str}, {"_id": 1})
+        if existing:
+            await db.user_langs.update_one({"_id": user_str}, {"$set": {"lang": lang}})
+            return
+
+    db = await get_active_db()
+    await db.user_langs.update_one({"_id": user_str}, {"$set": {"lang": lang}}, upsert=True)
