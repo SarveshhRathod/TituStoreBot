@@ -1,6 +1,6 @@
 from logger import logging
 from pyromod import listen
-from pyrogram import Client
+from pyrofork import Client
 from config import API_HASH, API_ID, BOT_TOKEN
 
 from keep_alive import keep_alive
