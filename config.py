@@ -20,6 +20,12 @@ AUTH_USERS = [int(i) for i in os.environ.get("AUTH_USERS", "").split() if i.stri
 if OWNER_ID and OWNER_ID not in AUTH_USERS:
     AUTH_USERS.append(OWNER_ID)
 
+# Web Stream Domain (Render/Koyeb/Heroku host URL)
+WEB_URL = os.environ.get("WEB_URL", "").rstrip("/")
+
+# Rate Limit Config (Requests per minute per user)
+RATE_LIMIT_PER_MIN = int(os.environ.get("RATE_LIMIT_PER_MIN", 10))
+
 # ---------------- Unlimited Multi-Database MongoDB ----------------
 DB_NAME = os.environ.get("DB_NAME", "TituStoreBot")
 MAX_DB_SIZE_MB = int(os.environ.get("MAX_DB_SIZE_MB", 470))
