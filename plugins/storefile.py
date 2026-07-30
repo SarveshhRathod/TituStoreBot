@@ -5,6 +5,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from .commands import encode_string, humanbytes
 from database.database import get_downloads, get_indexed_file, save_file_index
 from config import AUTH_USERS, DB_CHANNEL_ID, IS_PRIVATE, WEB_URL
+from .utils import is_playable
 
 
 @Client.on_message((filters.document | filters.video | filters.audio | filters.photo) & filters.incoming & ~filters.channel)
@@ -34,7 +35,7 @@ async def storefile(c, m):
     text += f"📂 **Fɪʟᴇ Nᴀᴍᴇ:** `{media_name}`\n\n"
     text += f"📦 **Fɪʟᴇ Sɪᴢᴇ:** __{media_size}__\n\n"
     text += f"👁 **Dᴏᴡɴʟᴏᴀᴅs:** `{downloads}`\n\n"
-    text += f"🍁 **Uᴘʟᴏᴀᴅᴇᴅ Bʏ:** [{m.from_user.first_name}](tg://user?id={m.from_user.id})\n\n"
+    text += f"🍁 **UᴘʟᴏᴀᴅᴇD Bʏ:** [{m.from_user.first_name}](tg://user?id={m.from_user.id})\n\n"
 
     bot = await c.get_me()
     base64_string = await encode_string(f"{m.chat.id}_{msg_id}")
@@ -49,8 +50,8 @@ async def storefile(c, m):
         ]
     ]
 
-    # Web Stream Button if WEB_URL is configured
-    if WEB_URL:
+    # Stream button ONLY if playable video/audio/doc and WEB_URL exists
+    if WEB_URL and is_playable(media):
         stream_link = f"{WEB_URL}/stream/{base64_string}"
         buttons.append([InlineKeyboardButton(text="🎬 Watch Online / Stream", url=stream_link)])
 
@@ -84,7 +85,11 @@ async def storefile_channel(c, m):
     url = f"https://t.me/{bot.username}?start={base64_string}"
 
     buttons = [[
-        InlineKeyboardButton(text="Oᴘᴇɴ Uʀʟ 🔗", url=url)
+        InlineKeyboardButton(text="OᴘᴇN Uʀʟ 🔗", url=url)
     ]]
+
+    if WEB_URL and is_playable(media):
+        stream_link = f"{WEB_URL}/stream/{base64_string}"
+        buttons[0].append(InlineKeyboardButton(text="🎬 Watch Online", url=stream_link))
 
     await m.edit_reply_markup(InlineKeyboardMarkup(buttons))
