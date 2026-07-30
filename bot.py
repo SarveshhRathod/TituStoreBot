@@ -1,9 +1,8 @@
-from logger import logging
-from pyromod import listen
-from pyrofork import Client
+import pyromod
+from pyrogram import Client
 from config import API_HASH, API_ID, BOT_TOKEN
-
 from keep_alive import keep_alive
+from logger import logging
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +14,7 @@ def main():
         api_id=API_ID,
         api_hash=API_HASH,
         plugins=plugins,
-        workers=200,
+        workers=100,
         sleep_threshold=15,
     )
 
