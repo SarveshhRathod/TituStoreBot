@@ -1,0 +1,71 @@
+{
+  "name": "TituStoreBot @SarveshhRathod",
+  "description": "Telegram Media Files & Document Storing Bot with a Permanent Shareable Link — now with unlimited multi-database MongoDB storage.",
+  "keywords": [
+    "telegram",
+    "best",
+    "Store",
+    "Files",
+    "MongoDB"
+  ],
+  "logo": "https://i.ibb.co/R2cswyL/folder.png",
+  "website": "https://github.com/SarveshhRathod/TituStoreBot",
+  "repository": "https://github.com/SarveshhRathod/TituStoreBot",
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Your bot token, as a string.",
+      "value": ""
+    },
+    "API_ID": {
+      "description": "Get this value from https://my.telegram.org",
+      "value": ""
+    },
+    "API_HASH": {
+      "description": "Get this value from https://my.telegram.org",
+      "value": ""
+    },
+    "DB_CHANNEL_ID": {
+      "description": "Telegram channel ID where files get stored (must be private, bot must be admin).",
+      "value": ""
+    },
+    "OWNER_ID": {
+      "description": "Your Telegram user id.",
+      "value": ""
+    },
+    "MONGO_URI": {
+      "description": "MongoDB connection string (e.g. from MongoDB Atlas free tier).",
+      "value": ""
+    },
+    "MONGO_URI2": {
+      "description": "Optional: a second MongoDB URI. The bot switches to it automatically once MONGO_URI fills up — add as many MONGO_URI2, MONGO_URI3... as you want for unlimited storage.",
+      "value": "",
+      "required": false
+    },
+    "UPDATE_CHANNEL": {
+      "description": "Your bot updates channel username without @ (force-sub). Leave empty to disable.",
+      "value": "",
+      "required": false
+    },
+    "AUTH_USERS": {
+      "description": "Space separated authorized user/channel ids, only used if IS_PRIVATE is True.",
+      "value": "",
+      "required": false
+    },
+    "IS_PRIVATE": {
+      "description": "Set to True to restrict the bot to AUTH_USERS only.",
+      "value": "",
+      "required": false
+    }
+  },
+  "buildpacks": [{
+    "url": "https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest"
+  }, {
+    "url": "heroku/python"
+  }],
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "free"
+    }
+  }
+}

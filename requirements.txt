@@ -1,0 +1,5 @@
+pyrogram==1.2.9
+Pyromod
+TgCrypto
+motor==3.3.2
+dnspython==2.4.2
