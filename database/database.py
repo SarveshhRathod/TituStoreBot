@@ -1,21 +1,5 @@
-"""
-Unlimited Multi-Database layer (MongoDB).
-
-Add as many MONGO_URI, MONGO_URI2, MONGO_URI3 ... environment variables as
-you like. New records are written to the first database that still has
-room; once it fills up (MAX_DB_SIZE_MB), the bot automatically starts
-writing to the next one. Reads check across every configured database so
-older records stay reachable no matter which database they live in.
-
-This replaces the old blocking SQLAlchemy/Postgres layer. All calls here
-are fully async (via motor), so they no longer freeze the bot's event loop
-on every single request — a major speed upgrade on its own.
-"""
-
 import asyncio
-
 import motor.motor_asyncio
-
 from config import DB_NAME, MAX_DB_SIZE_MB, MONGO_URIS
 from logger import logging
 
@@ -40,8 +24,6 @@ async def _size_mb(db) -> float:
 
 
 async def get_active_db():
-    """Return the database new records should be written to, auto-advancing
-    to the next configured database once the current one nears full."""
     global _active_index
 
     if len(_dbs) == 1:
@@ -60,7 +42,6 @@ async def get_active_db():
 
 
 async def get_db_status():
-    """Handy for an admin /dbstats style command."""
     status = []
     for i, db in enumerate(_dbs, start=1):
         size = await _size_mb(db)
@@ -73,31 +54,27 @@ async def get_db_status():
     return status
 
 
-async def update_as_name(id, mode: bool):
-    id = str(id)
-    # If the user already has a record somewhere, update it in place.
+async def update_as_name(id_val, mode: bool):
+    id_str = str(id_val)
     for db in _dbs:
-        existing = await db.settings.find_one({"_id": id}, {"_id": 1})
+        existing = await db.settings.find_one({"_id": id_str}, {"_id": 1})
         if existing:
-            await db.settings.update_one({"_id": id}, {"$set": {"up_name": mode}})
+            await db.settings.update_one({"_id": id_str}, {"$set": {"up_name": mode}})
             return
 
-    # New record -> goes to whichever database currently has room.
     db = await get_active_db()
-    await db.settings.update_one({"_id": id}, {"$set": {"up_name": mode}}, upsert=True)
+    await db.settings.update_one({"_id": id_str}, {"$set": {"up_name": mode}}, upsert=True)
 
 
-async def get_data(id):
-    """Returns an object with an `up_name` attribute (keeps the old
-    SQLAlchemy-style call sites working unchanged: `(await get_data(x)).up_name`)."""
-    id = str(id)
+async def get_data(id_val):
+    id_str = str(id_val)
     for db in _dbs:
-        doc = await db.settings.find_one({"_id": id})
+        doc = await db.settings.find_one({"_id": id_str})
         if doc:
             return _Row(doc.get("up_name", False))
 
     db = await get_active_db()
-    await db.settings.insert_one({"_id": id, "up_name": False})
+    await db.settings.insert_one({"_id": id_str, "up_name": False})
     return _Row(False)
 
 
@@ -108,10 +85,7 @@ class _Row:
         self.up_name = up_name
 
 
-# ---------------- Global bot settings (Admin Panel) ----------------
-# Single shared document controlling bot-wide features (auto-delete,
-# protect-content, etc). Lives in whichever DB has it; new writes go to
-# the active DB the first time it's created.
+# ---------------- Global bot settings ----------------
 _SETTINGS_ID = "global"
 DEFAULT_SETTINGS = {
     "_id": _SETTINGS_ID,
