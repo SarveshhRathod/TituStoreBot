@@ -1,15 +1,4 @@
-"""
-Admin Control Panel.
-
-/admin (or /panel) opens a button-based settings menu — only usable by
-the bot Owner or anyone listed in AUTH_USERS (auto-detected from config,
-no extra setup needed). Every feature toggle is persisted in MongoDB via
-database.get_settings()/update_settings(), so it survives restarts and
-applies bot-wide immediately.
-"""
-
 from pyrogram import Client, filters
-
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import AUTH_USERS, OWNER_ID
@@ -20,7 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 def is_admin(user_id: int) -> bool:
-    """Auto-detects admin rights: true for the Owner or anyone in AUTH_USERS."""
     return user_id == OWNER_ID or user_id in AUTH_USERS
 
 
