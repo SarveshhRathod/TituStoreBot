@@ -23,23 +23,11 @@ async def start_client_safe(client: Client, name: str = "Client"):
             await asyncio.sleep(e.value + 3)
         except Exception as e:
             logger.error(f"❌ Failed starting {name}: {e}")
-            raise e
+            await asyncio.sleep(10)
 
 
-async def start_services():
-    logger.info("Initializing Main Pyrogram Client...")
-    main_client = Client(
-        "TituStoreBot",
-        bot_token=BOT_TOKEN,
-        api_id=API_ID,
-        api_hash=API_HASH,
-        plugins=dict(root="plugins"),
-        workers=100,
-        sleep_threshold=15,
-    )
-
+async def _connect_bot_and_clients(main_client: Client):
     await start_client_safe(main_client, "Main Bot")
-
     multi_clients[0] = main_client
     work_loads[0] = 0
 
@@ -65,12 +53,29 @@ async def start_services():
             logger.error(f"Skipping Multi-Client #{index}: {e}")
         index += 1
 
+
+async def start_services():
+    # 1. Start aiohttp Web Server FIRST so Render detects port 10000 instantly!
     logger.info(f"Starting aiohttp Web Server on {Server.BIND_ADDRESS}:{Server.PORT}...")
     app_runner = web.AppRunner(build_web_app())
     await app_runner.setup()
     await web.TCPSite(app_runner, Server.BIND_ADDRESS, Server.PORT).start()
+    logger.info(f"🚀 Web Server Live at: {Server.URL}")
 
-    logger.info(f"🚀 TituStoreBot Fully Live at: {Server.URL}")
+    # 2. Start Main Pyrogram Client in background task
+    logger.info("Initializing Main Pyrogram Client...")
+    main_client = Client(
+        "TituStoreBot",
+        bot_token=BOT_TOKEN,
+        api_id=API_ID,
+        api_hash=API_HASH,
+        plugins=dict(root="plugins"),
+        workers=100,
+        sleep_threshold=15,
+    )
+
+    asyncio.create_task(_connect_bot_and_clients(main_client))
+
     await idle()
     await app_runner.cleanup()
 
