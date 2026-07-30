@@ -1,5 +1,4 @@
 import urllib.parse
-
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -7,10 +6,7 @@ from .commands import encode_string
 from config import AUTH_USERS, DB_CHANNEL_ID, IS_PRIVATE
 
 
-#### FOR PRIVATE ####
-
-
-@Client.on_message((filters.document | filters.video | filters.audio | filters.photo) & filters.incoming  & ~filters.channel)
+@Client.on_message((filters.document | filters.video | filters.audio | filters.photo) & filters.incoming & ~filters.channel)
 async def storefile(c, m):
     if IS_PRIVATE and m.from_user.id not in AUTH_USERS:
         return
@@ -21,22 +17,22 @@ async def storefile(c, m):
     text = ""
     if not m.photo:
         text = "--**🗃️ Fɪʟᴇ Dᴇᴛᴀɪʟs:**--\n\n"
-        text += f"📂 ** Fɪʟᴇ ɴᴀᴍᴇ :** `{media.file_name}`\n\n" if media.file_name else ""
-        text += f"🍃 **Mɪᴍᴇ Tʏᴘᴇ:** __{media.mime_type}__\n\n" if media.mime_type else ""
-        text += f"📦 **Fɪʟᴇ ꜱɪᴢᴇ :** __{humanbytes(media.file_size)}__\n\n" if media.file_size else ""
+        text += f"📂 ** Fɪʟᴇ ɴᴀᴍᴇ :** `{getattr(media, 'file_name', '')}`\n\n" if getattr(media, 'file_name', None) else ""
+        text += f"🍃 **Mɪᴍᴇ Tʏᴘᴇ:** __{getattr(media, 'mime_type', '')}__\n\n" if getattr(media, 'mime_type', None) else ""
+        text += f"📦 **Fɪʟᴇ ꜱɪᴢᴇ :** __{humanbytes(getattr(media, 'file_size', 0))}__\n\n" if getattr(media, 'file_size', None) else ""
         if not m.document:
-            text += f"🎞 **Dᴜʀᴀᴛɪᴏɴ:** __{TimeFormatter(media.duration * 1000)}__\n\n" if media.duration else ""
+            text += f"🎞 **Dᴜʀᴀᴛɪᴏɴ:** __{TimeFormatter(getattr(media, 'duration', 0) * 1000)}__\n\n" if getattr(media, 'duration', None) else ""
             if m.audio:
-                text += f"🎵 **Tɪᴛʟᴇ:** __{media.title}__\n\n" if media.title else ""
-                text += f"🎙 **Pᴇʀғᴏʀᴍᴇʀ:** __{media.performer}__\n\n" if media.performer else ""
+                text += f"🎵 **Tɪᴛʟᴇ:** __{getattr(media, 'title', '')}__\n\n" if getattr(media, 'title', None) else ""
+                text += f"🎙 **Pᴇʀғᴏʀᴍᴇʀ:** __{getattr(media, 'performer', '')}__\n\n" if getattr(media, 'performer', None) else ""
     text += f"**✏ Cᴀᴘᴛɪᴏɴ:** __{m.caption}__\n\n" if m.caption else ""
-    text += f"**🍁--Uᴘʟᴏᴀᴅᴇᴅ Bʏ :--** [{m.from_user.first_name}](tg://user?id={m.from_user.id}) \n\n"
+    text += f"**🍁--Uᴘʟᴏᴀᴅᴇᴅ Bʏ :--** [{m.from_user.first_name}](tg://user?id={m.from_user.id})\n\n"
 
     msg = await m.copy(DB_CHANNEL_ID)
     await msg.reply(text)
 
     bot = await c.get_me()
-    base64_string = await encode_string(f"{m.chat.id}_{msg.message_id}")
+    base64_string = await encode_string(f"{m.chat.id}_{msg.id}")
     url = f"https://t.me/{bot.username}?start={base64_string}"
     txt = urllib.parse.quote(text.replace('--', ''))
     share_url = f"tg://share?url={txt}File%20Link%20👉%20{url}"
@@ -45,7 +41,7 @@ async def storefile(c, m):
         InlineKeyboardButton(text="Oᴘᴇɴ Uʀʟ 🔗", url=url),
         InlineKeyboardButton(text="Sʜᴀʀᴇ Lɪɴᴋ 👤", url=share_url)
     ], [
-        InlineKeyboardButton(text="Dᴇʟᴇᴛᴇ Fɪʟᴇ🗑", callback_data=f"delete+{msg.message_id}")
+        InlineKeyboardButton(text="Dᴇʟᴇᴛᴇ Fɪʟᴇ🗑", callback_data=f"delete+{msg.id}")
     ]]
 
     await send_message.edit(
@@ -54,10 +50,7 @@ async def storefile(c, m):
     )
 
 
-###### FOR CHANNEL ######
-
-
-@Client.on_message((filters.document | filters.video | filters.audio | filters.photo) & filters.incoming & filters.channel & ~filters.forwarded )
+@Client.on_message((filters.document | filters.video | filters.audio | filters.photo) & filters.incoming & filters.channel & ~filters.forwarded)
 async def storefile_channel(c, m):
     if IS_PRIVATE and m.chat.id not in AUTH_USERS:
         return
@@ -66,15 +59,15 @@ async def storefile_channel(c, m):
 
     text = ""
     if not m.photo:
-        text = "--**🗃️ Fɪʟᴇ Dᴇᴛᴀɪʟs:**--\n\n"
-        text += f"📂 ** Fɪʟᴇ ɴᴀᴍᴇ :** `{media.file_name}`\n\n" if media.file_name else ""
-        text += f"🍃 **Mɪᴍᴇ Tʏᴘᴇ:** __{media.mime_type}__\n\n" if media.mime_type else ""
-        text += f"📦 **Fɪʟᴇ ꜱɪᴢᴇ :** __{humanbytes(media.file_size)}__\n\n" if media.file_size else ""
+        text = "--**🗃️ FɪʟES Dᴇᴛᴀɪʟs:**--\n\n"
+        text += f"📂 ** Fɪʟᴇ ɴᴀᴍᴇ :** `{getattr(media, 'file_name', '')}`\n\n" if getattr(media, 'file_name', None) else ""
+        text += f"🍃 **Mɪᴍᴇ Tʏᴘᴇ:** __{getattr(media, 'mime_type', '')}__\n\n" if getattr(media, 'mime_type', None) else ""
+        text += f"📦 **Fɪʟᴇ ꜱɪᴢᴇ :** __{humanbytes(getattr(media, 'file_size', 0))}__\n\n" if getattr(media, 'file_size', None) else ""
         if not m.document:
-            text += f"🎞 **Dᴜʀᴀᴛɪᴏɴ:** __{TimeFormatter(media.duration * 1000)}__\n\n" if media.duration else ""
+            text += f"🎞 **Dᴜʀᴀᴛɪᴏɴ:** __{TimeFormatter(getattr(media, 'duration', 0) * 1000)}__\n\n" if getattr(media, 'duration', None) else ""
             if m.audio:
-                text += f"🎵 **Tɪᴛʟᴇ:** __{media.title}__\n\n" if media.title else ""
-                text += f"🎙 **Pᴇʀғᴏʀᴍᴇʀ:** __{media.performer}__\n\n" if media.performer else ""
+                text += f"🎵 **Tɪᴛʟᴇ:** __{getattr(media, 'title', '')}__\n\n" if getattr(media, 'title', None) else ""
+                text += f"🎙 **Pᴇʀғᴏʀᴍᴇʀ:** __{getattr(media, 'performer', '')}__\n\n" if getattr(media, 'performer', None) else ""
     text += f"**✏ Cᴀᴘᴛɪᴏɴ:** __{m.caption}__\n\n" if m.caption else ""
     text += f"**🍁 Uᴘʟᴏᴀᴅᴇᴅ Bʏ :--** __{m.chat.title}__\n\n"
     text += f"**🗣 Usᴇʀ Nᴀᴍᴇ:** @{m.chat.username}\n\n" if m.chat.username else ""
@@ -84,7 +77,7 @@ async def storefile_channel(c, m):
     await msg.reply(text)
 
     bot = await c.get_me()
-    base64_string = await encode_string(f"{m.chat.id}_{msg.message_id}")
+    base64_string = await encode_string(f"{m.chat.id}_{msg.id}")
     url = f"https://t.me/{bot.username}?start={base64_string}"
     txt = urllib.parse.quote(text.replace('--', ''))
     share_url = f"tg://share?url={txt}File%20Link%20👉%20{url}"
