@@ -1,5 +1,6 @@
 import os
 import re
+import queue
 import asyncio
 import base64
 from flask import Flask, Response, request, render_template_string
@@ -24,7 +25,7 @@ PLAYER_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vidstream - {{ title }}</title>
+    <title>Vidstream Fast - {{ title }}</title>
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -109,7 +110,7 @@ PLAYER_TEMPLATE = """
     </div>
 
     <div class="player-container">
-        <video id="player" controls playsinline crossorigin>
+        <video id="player" controls playsinline crossorigin preload="auto">
             <source src="/watch/{{ file_id }}" type="{{ mime }}">
             Your browser does not support video playback.
         </video>
@@ -117,7 +118,7 @@ PLAYER_TEMPLATE = """
 
     <div class="actions">
         <a href="/watch/{{ file_id }}" download="{{ title }}" class="btn">
-            📥 Direct Download
+            📥 Direct Fast Download
         </a>
         <a href="vlc://{{ stream_raw_url }}" class="btn btn-vlc">
             🍊 Play in VLC / MX Player
@@ -125,7 +126,7 @@ PLAYER_TEMPLATE = """
     </div>
 
     <div class="footer">
-        Powered by TituStoreBot Vidstream Engine
+        Powered by TituStoreBot Fast Vidstream Engine
     </div>
 
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
@@ -170,7 +171,7 @@ def _get_msg_safe(msg_id: int):
 
 @app.get("/")
 def home():
-    return "TituStoreBot Vidstream Engine is Online!", 200
+    return "TituStoreBot Ultra-Fast Vidstream Engine is Online!", 200
 
 
 @app.get("/health")
@@ -248,34 +249,33 @@ def watch_stream(file_id):
 
         content_length = end - start + 1
 
-        def stream_generator():
+        def fast_buffered_stream_generator():
             loop = pyro_client.loop
-            async def _async_stream():
-                async for chunk in pyro_client.stream_media(msg, offset=start):
-                    yield chunk
+            chunk_queue = queue.Queue(maxsize=10)
 
-            gen = pyro_client.stream_media(msg, offset=start)
-            if asyncio.iscoroutine(gen):
-                gen = asyncio.run_coroutine_threadsafe(gen, loop).result(timeout=10)
+            async def _fetch_chunks():
+                try:
+                    async for chunk in pyro_client.stream_media(msg, offset=start):
+                        chunk_queue.put(chunk)
+                    chunk_queue.put(None)
+                except Exception as err:
+                    logger.error(f"Async fetch chunk error: {err}")
+                    chunk_queue.put(None)
 
-            if hasattr(gen, '__aiter__'):
-                async_gen = gen.__aiter__()
-                while True:
-                    try:
-                        future = asyncio.run_coroutine_threadsafe(async_gen.__anext__(), loop)
-                        chunk = future.result(timeout=15)
-                        yield chunk
-                    except StopAsyncIteration:
+            asyncio.run_coroutine_threadsafe(_fetch_chunks(), loop)
+
+            while True:
+                try:
+                    chunk = chunk_queue.get(timeout=20)
+                    if chunk is None:
                         break
-                    except Exception as err:
-                        logger.error(f"Stream error: {err}")
-                        break
-            elif hasattr(gen, '__iter__'):
-                for chunk in gen:
                     yield chunk
+                except Exception as e:
+                    logger.error(f"Buffered queue read error: {e}")
+                    break
 
         response = Response(
-            stream_generator(),
+            fast_buffered_stream_generator(),
             status=status_code,
             mimetype=mime_type,
             direct_passthrough=True
@@ -283,6 +283,7 @@ def watch_stream(file_id):
         response.headers.add('Content-Range', f'bytes {start}-{end}/{file_size}')
         response.headers.add('Accept-Ranges', 'bytes')
         response.headers.add('Content-Length', str(content_length))
+        response.headers.add('Cache-Control', 'public, max-age=31536000')
         return response
 
     except Exception as e:
