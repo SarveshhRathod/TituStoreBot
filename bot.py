@@ -20,13 +20,17 @@ def main():
         sleep_threshold=15,
     )
 
-    # ------------------ PERMANENT FIX FOR PYROMOD KEYERROR ------------------
-    # Wrap app.listeners in a defaultdict so missing keys return [] instead of KeyError
-    if not hasattr(app, "listeners") or app.listeners is None:
-        app.listeners = defaultdict(list)
-    elif isinstance(app.listeners, dict) and not isinstance(app.listeners, defaultdict):
-        app.listeners = defaultdict(list, app.listeners)
-    # -------------------------------------------------------------------------
+    # ------------------ PERMANENT FIX FOR PYROMOD 3.x ------------------
+    # Pyromod 3.x expects app.listeners[listener_type] to be a DICT with .items()
+    if not hasattr(app, "listeners") or not isinstance(app.listeners, dict):
+        app.listeners = defaultdict(dict)
+    else:
+        new_listeners = defaultdict(dict)
+        for k, v in app.listeners.items():
+            if isinstance(v, dict):
+                new_listeners[k] = v
+        app.listeners = new_listeners
+    # -------------------------------------------------------------------
 
     logger.info("TituStoreBot is starting...")
     keep_alive()
