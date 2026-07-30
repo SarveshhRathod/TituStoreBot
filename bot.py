@@ -1,6 +1,4 @@
-import pyromod  # Import pyromod before Client
 from pyrogram import Client
-
 from config import API_HASH, API_ID, BOT_TOKEN
 from keep_alive import keep_alive
 from logger import logging
