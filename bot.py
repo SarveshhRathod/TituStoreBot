@@ -1,37 +1,67 @@
-from collections import defaultdict
-from pyrogram import Client
-from config import API_HASH, API_ID, BOT_TOKEN
-from keep_alive import keep_alive, set_pyro_client
+import os
+import asyncio
+from aiohttp import web
+from pyrogram import Client, idle
+from config import API_HASH, API_ID, BOT_TOKEN, Telegram, Server
+from server.web_server import build_web_app
+from server.byte_streamer import multi_clients, work_loads
 from logger import logging
 
 logger = logging.getLogger(__name__)
 
-def main():
-    plugins = dict(root="plugins")
-    app = Client(
+async def start_services():
+    logger.info("Initializing Main Pyrogram Client...")
+    main_client = Client(
         "TituStoreBot",
         bot_token=BOT_TOKEN,
         api_id=API_ID,
         api_hash=API_HASH,
-        plugins=plugins,
+        plugins=dict(root="plugins"),
         workers=100,
         sleep_threshold=15,
     )
 
-    # Universal Safe Initialization for listeners dictionary
-    if not hasattr(app, "listeners") or app.listeners is None:
-        app.listeners = defaultdict(dict)
-    elif isinstance(app.listeners, dict) and not isinstance(app.listeners, defaultdict):
-        new_listeners = defaultdict(dict)
-        for k, v in app.listeners.items():
-            if isinstance(v, dict):
-                new_listeners[k] = v
-        app.listeners = new_listeners
+    await main_client.start()
+    bot_info = await main_client.get_me()
+    logger.info(f"Main Bot Live: @{bot_info.username}")
 
-    logger.info("TituStoreBot is starting...")
-    set_pyro_client(app)
-    keep_alive()
-    app.run()
+    multi_clients[0] = main_client
+    work_loads[0] = 0
+
+    # Multi-Client Load Balancing Initializer
+    index = 1
+    while True:
+        token = os.environ.get(f"MULTI_TOKEN{index}")
+        if not token:
+            break
+        try:
+            extra_client = Client(
+                name=f"multi_{index}",
+                api_id=API_ID,
+                api_hash=API_HASH,
+                bot_token=token.strip(),
+                sleep_threshold=15,
+                no_updates=True,
+                in_memory=True,
+            )
+            await extra_client.start()
+            multi_clients[index] = extra_client
+            work_loads[index] = 0
+            logger.info(f"Multi-Client #{index} Active!")
+        except Exception as e:
+            logger.error(f"Failed starting Multi-Client #{index}: {e}")
+        index += 1
+
+    # Start Native aiohttp Async Web Server in same event loop
+    logger.info(f"Starting aiohttp Web Server on {Server.BIND_ADDRESS}:{Server.PORT}...")
+    app_runner = web.AppRunner(build_web_app())
+    await app_runner.setup()
+    await web.TCPSite(app_runner, Server.BIND_ADDRESS, Server.PORT).start()
+
+    logger.info(f"🚀 TituStoreBot Fully Live at: {Server.URL}")
+    await idle()
+    await app_runner.cleanup()
 
 if __name__ == "__main__":
-    main()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(start_services())
