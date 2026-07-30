@@ -2,7 +2,6 @@ import asyncio
 import base64
 
 from pyrogram import Client, filters
-from pyrogram.errors import ListenerCanceled
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import AUTH_USERS, DB_CHANNEL_ID, IS_PRIVATE, OWNER_ID
@@ -162,7 +161,7 @@ async def batch(c, m):
                 if media.text == "/cancel":
                     return await m.reply_text('Cᴀɴᴄᴇʟʟᴇᴅ Sᴜᴄᴄᴇssғᴜʟʟʏ ✌')
                 files.append(media)
-            except ListenerCanceled:
+            except Exception:
                 pass
             except Exception as e:
                 logger.error(f"Batch collection error: {e}")
