@@ -37,7 +37,7 @@
       "value": ""
     },
     "MONGO_URI2": {
-      "description": "Optional: a second MongoDB URI. The bot switches to it automatically once MONGO_URI fills up — add as many MONGO_URI2, MONGO_URI3... as you want for unlimited storage.",
+      "description": "Optional: a second MongoDB URI. The bot switches to it automatically once MONGO_URI fills up.",
       "value": "",
       "required": false
     },
@@ -57,15 +57,15 @@
       "required": false
     }
   },
-  "buildpacks": [{
-    "url": "https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest"
-  }, {
-    "url": "heroku/python"
-  }],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
   "formation": {
     "worker": {
       "quantity": 1,
-      "size": "free"
+      "size": "eco"
     }
   }
 }
