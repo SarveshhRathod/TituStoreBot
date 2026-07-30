@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ---------------- Telegram Core ----------------
 API_ID = int(os.environ.get("API_ID", 0))
@@ -20,26 +23,22 @@ AUTH_USERS = [int(i) for i in os.environ.get("AUTH_USERS", "").split() if i.stri
 if OWNER_ID and OWNER_ID not in AUTH_USERS:
     AUTH_USERS.append(OWNER_ID)
 
-# Web Stream Domain (Render/Koyeb/Heroku host URL)
-WEB_URL = os.environ.get("WEB_URL", "").rstrip("/")
-
-# Rate Limit Config (Requests per minute per user)
 RATE_LIMIT_PER_MIN = int(os.environ.get("RATE_LIMIT_PER_MIN", 10))
 
 # ---------------- Unlimited Multi-Database MongoDB ----------------
 DB_NAME = os.environ.get("DB_NAME", "TituStoreBot")
-MAX_DB_SIZE_MB = int(os.environ.get("MAX_DB_SIZE_MB", 470))
+MAX_DB_SIZE_MB = int(os.environ.get("MAX_DB_SIZE_MB", 460))
 
 
 def _load_mongo_uris():
     uris = []
-    first = os.environ.get("MONGO_URI")
+    first = os.environ.get("MONGO_URI") or os.environ.get("DATABASE_URL")
     if first:
         uris.append(first.strip())
 
     index = 2
     while True:
-        uri = os.environ.get(f"MONGO_URI{index}")
+        uri = os.environ.get(f"MONGO_URI{index}") or os.environ.get(f"DATABASE_URL_{index}")
         if not uri:
             break
         uris.append(uri.strip())
@@ -50,7 +49,56 @@ def _load_mongo_uris():
 
 MONGO_URIS = _load_mongo_uris()
 if not MONGO_URIS:
-    raise ValueError(
-        "No MongoDB URI found! Set at least MONGO_URI in your environment "
-        "(add MONGO_URI2, MONGO_URI3, ... for unlimited extra storage)."
+    raise ValueError("No MongoDB URI found! Set MONGO_URI or DATABASE_URL in environment.")
+
+
+# ---------------- Web Server & FQDN Auto Detection ----------------
+def _detect_fqdn():
+    manual = os.environ.get("FQDN")
+    if manual:
+        return manual, True
+
+    port = os.environ.get("PORT", "8080")
+    codespace = os.environ.get("CODESPACE_NAME")
+    platform_candidates = (
+        os.environ.get("RENDER_EXTERNAL_HOSTNAME"),
+        os.environ.get("KOYEB_PUBLIC_DOMAIN"),
+        os.environ.get("RAILWAY_PUBLIC_DOMAIN"),
+        (os.environ.get("FLY_APP_NAME") + ".fly.dev") if os.environ.get("FLY_APP_NAME") else None,
+        (os.environ.get("HEROKU_APP_NAME") + ".herokuapp.com") if os.environ.get("HEROKU_APP_NAME") else None,
+        (f"{codespace}-{port}.app.github.dev") if codespace else None,
+    )
+    for host in platform_candidates:
+        if host:
+            return host, True
+
+    try:
+        import requests
+        resp = requests.get("https://api.ipify.org", timeout=5)
+        if resp.ok and resp.text.strip():
+            return resp.text.strip(), False
+    except Exception:
+        pass
+
+    return str(os.environ.get("BIND_ADDRESS", "0.0.0.0")), False
+
+
+class Server:
+    PORT = int(os.environ.get("PORT", 8080))
+    BIND_ADDRESS = str(os.environ.get("BIND_ADDRESS", "0.0.0.0"))
+    FQDN, _IS_PLATFORM_DOMAIN = _detect_fqdn()
+
+    _has_ssl_env = os.environ.get("HAS_SSL")
+    HAS_SSL = (
+        str(_has_ssl_env).lower() in ("1", "true", "t", "yes", "y")
+        if _has_ssl_env is not None else _IS_PLATFORM_DOMAIN
+    )
+    _no_port_env = os.environ.get("NO_PORT")
+    NO_PORT = (
+        str(_no_port_env).lower() in ("1", "true", "t", "yes", "y")
+        if _no_port_env is not None else _IS_PLATFORM_DOMAIN
+    )
+
+    URL = "http{}://{}{}/".format(
+        "s" if HAS_SSL else "", FQDN, "" if NO_PORT else ":" + str(PORT)
     )
