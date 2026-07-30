@@ -1,6 +1,6 @@
 from pyrogram import Client
 from config import API_HASH, API_ID, BOT_TOKEN
-from keep_alive import keep_alive
+from keep_alive import keep_alive, set_pyro_client
 from logger import logging
 
 logger = logging.getLogger(__name__)
@@ -18,6 +18,7 @@ def main():
     )
 
     logger.info("TituStoreBot is starting...")
+    set_pyro_client(app)
     keep_alive()
     app.run()
 
